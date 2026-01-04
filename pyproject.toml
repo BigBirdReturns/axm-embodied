@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "axm-embodied-genesis"
+version = "1.0.0"
+description = "Frozen genesis artifact for embodied AI knowledge shards"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+  "pynacl>=1.5.0",
+  "click>=8.0.0",
+  "blake3>=0.4.1",
+  "pandas>=2.0.0",
+  "pyarrow>=14.0.0"
+]
+
+[project.scripts]
+axm-verify = "axm_verify.cli:main"
+axm-compile = "axm_compile.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]

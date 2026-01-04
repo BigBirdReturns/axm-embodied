@@ -1,0 +1,7 @@
+Version: v2.2-courtgrade
+AXM Phase 2 Gold Master (RC2.0)
+Built: 2026-01-04T03:38:16Z
+
+214dc92f2a0ce0cd1f27101e41ff015ba7124b4ecc999ff5a9bbeb00f57eea22  tools/sim_robot_final.py
+e855672fdf4b349ecf3f84904c776dce6195b2e6c54dff8891e694d6587e3a83  src/axm_compile/streams.py
+18fd60cdec7b0ac420f945c27679e91cdceed9b351f67e86cf22490d07ddcea7  docs/RFC-001-heavy-evidence.md

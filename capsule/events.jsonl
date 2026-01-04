@@ -1,0 +1,7 @@
+{"ts":"2026-01-01T12:00:00.000Z","lvl":"INFO","evt":"session_start","robot_id":"robot-001"}
+{"ts":"2026-01-01T12:00:02.100Z","lvl":"INFO","evt":"cmd_vel","vx":0.6,"wz":0.0}
+{"ts":"2026-01-01T12:00:03.000Z","lvl":"WARN","evt":"wheel_slip","wheel":"rear_left","slip_ratio":0.42,"surface":"wet_tile"}
+{"ts":"2026-01-01T12:00:03.050Z","lvl":"INFO","evt":"recovery_action","action":"reduce_throttle","value":0.3}
+{"ts":"2026-01-01T12:00:03.150Z","lvl":"INFO","evt":"recovery_action","action":"increase_traction_control","value":1}
+{"ts":"2026-01-01T12:00:04.200Z","lvl":"INFO","evt":"wheel_slip_cleared","wheel":"rear_left","slip_ratio":0.08}
+{"ts":"2026-01-01T12:00:10.000Z","lvl":"INFO","evt":"session_end","ok":true}

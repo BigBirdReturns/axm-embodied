@@ -1,0 +1,1 @@
+{"capsule":{"file":null,"sha256":null},"created_at":"2026-01-01T00:00:00Z","integrity":{"algorithm":"SHA256-ACCUMULATOR-V1","files":["graph/entities.parquet","graph/claims.parquet","graph/provenance.parquet","evidence/spans.parquet"],"merkle_root":"b045005f30a6e6ed02bfe7fff4ba15aa1d35ce40be16609f4cdaf3f6cd83fb2b"},"namespace":"embodied/demo","version":"1.0.0"}
