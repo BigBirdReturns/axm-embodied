@@ -1,45 +1,57 @@
-"""AXM Embodied Genesis - Deterministic Identity Functions."""
+"""
+axm-embodied/src/axm_core/ids.py
+
+Backward-compatible identity shim.
+
+Delegates entity_id and claim_id to the canonical genesis hub
+(axm_verify.identity) so hash outputs remain identical across
+axm-core and axm-embodied. Verified safe by Unicode diff:
+NFKC vs NFC divergence does not affect ASCII telemetry domain.
+
+span_id and prov_id have no genesis equivalent — physical telemetry
+byte ranges are embodied-specific. They stay local.
+
+Import contract for all embodied callers is unchanged:
+    from axm_core.ids import entity_id, claim_id, span_id, prov_id
+"""
 from __future__ import annotations
 
 import base64
 import hashlib
-import unicodedata
 
+# ── Delegate to genesis hub ───────────────────────────────────────────────
+from axm_verify.identity import (
+    recompute_entity_id as entity_id,
+    recompute_claim_id as claim_id,
+    canonicalize,
+)
 
-def canonicalize(text: str) -> str:
-    """Canonicalize text per AXM spec: NFKC, casefold, whitespace normalize."""
-    if not text:
-        return ""
-    t = unicodedata.normalize("NFKC", text).casefold()
-    return " ".join(t.split())
-
+# ── Embodied-specific: byte-range identity ────────────────────────────────
+# These functions address physical telemetry byte positions.
+# No genesis equivalent exists. They remain local and frozen.
 
 def _hash(b: bytes, prefix: str) -> str:
-    """Compute truncated SHA-256 hash with base32 encoding."""
+    """Compute truncated SHA-256 hash with base32 encoding.
+    Algorithm is frozen — changing this breaks all historical shard IDs.
+    """
     h = hashlib.sha256(b).digest()[:15]
     return prefix + base64.b32encode(h).decode("ascii").lower().rstrip("=")
 
 
-def entity_id(ns: str, label: str) -> str:
-    """Generate deterministic entity ID from namespace and label."""
-    payload = canonicalize(ns) + "\x00" + canonicalize(label)
-    return _hash(payload.encode("utf-8"), "e_")
-
-
-def claim_id(sub: str, pred: str, obj: str, obj_type: str) -> str:
-    """Generate deterministic claim ID."""
-    obj_clean = obj if obj_type == "entity" else canonicalize(obj)
-    payload = f"{sub}\x00{canonicalize(pred)}\x00{obj_type}\x00{obj_clean}"
-    return _hash(payload.encode("utf-8"), "c_")
-
-
 def span_id(src_hash: str, start: int, end: int, text: str) -> str:
-    """Generate deterministic span ID."""
+    """Generate deterministic span ID from source hash + byte range + text.
+
+    Frozen. Identical to original embodied implementation.
+    Changing this invalidates all historical evidence/spans.parquet joins.
+    """
     payload = f"{src_hash}\x00{start}\x00{end}\x00{text}"
     return _hash(payload.encode("utf-8"), "s_")
 
 
 def prov_id(cid: str, sid: str) -> str:
-    """Generate deterministic provenance ID."""
+    """Generate deterministic provenance ID from claim + span.
+
+    Frozen. Identical to original embodied implementation.
+    """
     payload = f"{cid}\x00{sid}"
     return _hash(payload.encode("utf-8"), "p_")

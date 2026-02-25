@@ -1,3 +1,0 @@
-axm_compile
-axm_core
-axm_verify

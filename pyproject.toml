@@ -4,23 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axm-embodied-genesis"
-version = "1.1.0"
-description = "Frozen genesis artifact for embodied AI knowledge shards"
+version = "1.2.0"
+description = "Physical liability spoke of the AXM ecosystem"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = [
-  "pynacl>=1.5.0",
-  "click>=8.0.0",
-  "blake3>=0.4.0",
+  # ── Hub dependency ────────────────────────────────────────────────────
+  # All cryptography (blake3, pynacl, dilithium-py) comes transitively
+  # from axm-core. Embodied does not own or version the math layer.
+  "axm-core @ git+https://github.com/BigBirdReturns/axm-core.git@main",
+
+  # ── Embodied-specific ─────────────────────────────────────────────────
+  # Heavy robotics/data deps that have no business in axm-core.
   "pandas>=2.0.0",
   "pyarrow>=14.0.0",
-  "dilithium-py>=0.5.0",
+  "click>=8.0.0",
 ]
 
 [project.scripts]
+# axm-compile entry point now routes through tools/compile_capsule.py
+# axm-verify routes through the governance-aware logic wrapper
 axm-verify = "axm_verify.cli:main"
-axm-compile = "axm_compile.cli:main"
+axm-compile = "axm_embodied.compile:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

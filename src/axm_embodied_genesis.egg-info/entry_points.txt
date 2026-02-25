@@ -1,3 +1,0 @@
-[console_scripts]
-axm-compile = axm_compile.cli:main
-axm-verify = axm_verify.cli:main
