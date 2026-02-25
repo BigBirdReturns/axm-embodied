@@ -1,9 +1,10 @@
-import shutil
 import subprocess
 from pathlib import Path
 
+
 def run(cmd, cwd):
     return subprocess.run(cmd, cwd=cwd, shell=True, check=False, capture_output=True, text=True)
+
 
 def test_safe_and_crash_pattern2(tmp_path):
     repo = Path(__file__).resolve().parents[1]
@@ -25,19 +26,21 @@ def test_safe_and_crash_pattern2(tmp_path):
     assert r.returncode == 0, r.stderr + r.stdout
 
     cap = next(crash_dir.glob("capsule-*"))
-    r = run(f"python -m axm_compile.cli {cap} {shard_out}", cwd=repo)
+
+    # Compile via axm-compile CLI (src/axm_embodied/compile.py)
+    r = run(f"axm-compile {cap} {shard_out} --legacy", cwd=repo)
     assert r.returncode == 0, r.stderr + r.stdout
 
     streams = shard_out / "evidence" / "streams.parquet"
     assert streams.exists()
     assert streams.stat().st_size > 0
 
-    # Corrupt and ensure failure
+    # Corrupt and ensure StrictJudge rejects
     lat = cap / "cam_latents.bin"
     b = bytearray(lat.read_bytes())
     b[4 + 8] ^= 0x01
     lat.write_bytes(bytes(b))
 
     shard_out_fail = tmp_path / "shard_out_fail"
-    r = run(f"python -m axm_compile.cli {cap} {shard_out_fail}", cwd=repo)
-    assert r.returncode != 0
+    r = run(f"axm-compile {cap} {shard_out_fail} --legacy", cwd=repo)
+    assert r.returncode != 0, "Expected FATAL on corrupted latents"

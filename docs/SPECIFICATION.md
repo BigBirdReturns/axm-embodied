@@ -313,9 +313,18 @@ BLAKE3(path + 0x00 + content)
 
 ## 12. Cryptographic Signing
 
-- Ed25519 is required
-- The manifest is signed byte-for-byte
-- The public key is included in sig/publisher.pub
+Two suites are supported, declared via the `suite` field in `manifest.json`.
+
+| Suite | Status | Algorithm |
+|-------|--------|-----------|
+| `axm-blake3-mldsa44` | **Default** | ML-DSA-44 (FIPS 204), post-quantum |
+| `ed25519` | Legacy | Ed25519, backward-compatible |
+
+When `suite` is absent, implementations must default to `ed25519` (v1.0 shard compatibility).
+
+- The manifest is signed byte-for-byte.
+- The public key is included in `sig/publisher.pub`.
+- Ed25519 shards verify unchanged under new verifiers.
 
 ------
 

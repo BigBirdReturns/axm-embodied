@@ -1,7 +1,23 @@
-Version: v2.2-courtgrade
-AXM Phase 2 Gold Master (RC2.0)
-Built: 2026-01-04T03:38:16Z
+Version: v1.2.0
+AXM Embodied — Hub-and-Spoke Migration
+Built: 2026-02-24T00:00:00Z
 
-214dc92f2a0ce0cd1f27101e41ff015ba7124b4ecc999ff5a9bbeb00f57eea22  tools/sim_robot_final.py
-e855672fdf4b349ecf3f84904c776dce6195b2e6c54dff8891e694d6587e3a83  src/axm_compile/streams.py
-18fd60cdec7b0ac420f945c27679e91cdceed9b351f67e86cf22490d07ddcea7  docs/RFC-001-heavy-evidence.md
+Migration: axm_compile and axm_verify deleted.
+Crypto routing now through axm-core hub (transitively: blake3, pynacl, dilithium-py).
+
+Key files:
+  tools/sim_robot_final.py       Simulator — data generator, unchanged
+  src/axm_embodied/streams.py    Binary stream parser (rescued from axm_compile)
+  src/axm_core/ids.py            Identity shim → delegates entity_id/claim_id to genesis hub
+  src/axm_core/protocol.py       Embodied binary constants (AXLF, AXRR, etc.)
+  tools/compile_capsule.py       Post-run compiler — replaces axm-compile CLI
+  governance/trust_store.json    Publisher trust anchors
+  governance/local_policy.json   Runtime actuation policy
+
+Deleted:
+  src/axm_compile/               All modules removed; streams.py rescued to axm_embodied
+  src/axm_verify/                All modules removed; logic.py behavior stays in governance layer
+
+Backward compatibility:
+  Identity hash functions verified identical across NFKC/NFC Unicode edge cases.
+  All historical shard IDs remain valid. No recompile required.

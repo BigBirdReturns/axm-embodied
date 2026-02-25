@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-# axm-compile entry point now routes through tools/compile_capsule.py
+# axm-compile installs the module entry point from src/axm_embodied/compile.py
 # axm-verify routes through the governance-aware logic wrapper
 axm-verify = "axm_verify.cli:main"
 axm-compile = "axm_embodied.compile:main"
