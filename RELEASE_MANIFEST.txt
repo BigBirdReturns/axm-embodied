@@ -21,3 +21,8 @@ Deleted:
 Backward compatibility:
   Identity hash functions verified identical across NFKC/NFC Unicode edge cases.
   All historical shard IDs remain valid. No recompile required.
+
+v1.4.0 additions:
+  src/axm_embodied/bounds.py     Bounds Compiler — Drone School (installed as axm-bounds)
+  tools/compile_bounds.py        Thin alias to axm_embodied.bounds
+  pyproject.toml                 axm-bounds entry point + numpy dependency added

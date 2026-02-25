@@ -179,6 +179,26 @@ def compile_capsule(
                 2, start, end, text,
             )
 
+        # ── Mens Rea: action distribution (present on every frame) ───────
+        # selected_action → Tier 1 entity claim (the safety decision)
+        # considered_action → Tier 2 literal claims (the probability weights)
+        # These are parsed independently of evt type so every frame carries
+        # the full decision state, not just crash frames.
+        if "selected_action" in evt and "action_distribution" in evt:
+            rid = add_entity(evt.get("robot_id", "robot-001"), "robot")
+            selected = evt["selected_action"]
+
+            # Tier 1: what the robot chose (entity → queryable across fleet)
+            add_claim(rid, "selected_action", selected, "entity",
+                      1, start, end, text)
+
+            # Tier 2: full distribution (literal → audit trail for adjuster)
+            for action, conf in evt["action_distribution"].items():
+                literal_val = json.dumps({"action": action, "confidence": conf},
+                                         separators=(",", ":"))
+                add_claim(rid, "considered_action", literal_val, "literal:string",
+                          2, start, end, text)
+
     # ── 3. Write shard structure ──────────────────────────────────────────
     out_path.mkdir(parents=True, exist_ok=True)
     for d in ("graph", "evidence", "sig", "content"):

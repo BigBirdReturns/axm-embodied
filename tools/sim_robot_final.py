@@ -15,6 +15,30 @@ from axm_core.protocol import (
     LATENT_DIM,
     LATENT_REC_LEN,
 )
+
+# ── Mens Rea: VLA action distribution ────────────────────────────────────
+_VLA_ACTIONS = [
+    "maintain_speed", "decelerate", "steer_left", "steer_right", "emergency_stop"
+]
+
+def _fake_vla_inference(selected: str) -> dict:
+    """Simulate a VLA softmax distribution over the action space.
+
+    In production this is replaced by the real inference output.
+    The selected action receives the majority probability mass.
+    Remaining mass is distributed randomly across alternatives.
+    """
+    conf = round(random.uniform(0.70, 0.95), 4)
+    dist = {selected: conf}
+    rem = round(1.0 - conf, 4)
+    others = [a for a in _VLA_ACTIONS if a != selected]
+    for a in others[:-1]:
+        val = round(random.uniform(0, rem), 4)
+        dist[a] = val
+        rem = round(rem - val, 4)
+    dist[others[-1]] = max(0.0, round(rem, 4))  # clamp float drift
+    return dist
+
 # --- CONFIGURATION ---
 FPS = 10
 # LATENT_DIM imported from axm_core.protocol
@@ -118,8 +142,19 @@ def generate_session(out_dir, crash=False):
         recorder.push(frame_id, residuals)
 
         # 5. Log (Pattern 2: No Residual Pointers)
+        # Mens Rea: determine selected action for this frame
+        if evt and evt.get("evt") == "wheel_slip":
+            _selected = "emergency_stop"
+        elif evt and evt.get("evt") == "recovery_action":
+            _selected = evt.get("action", "decelerate")
+        else:
+            _selected = "maintain_speed"
+
         log_entry = {
             "frame_id": frame_id,
+            "robot_id": "sim-final",
+            "selected_action": _selected,
+            "action_distribution": _fake_vla_inference(_selected),
             "stream_refs": {
                 "latents": {
                     "file": "cam_latents.bin",
