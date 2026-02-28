@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Test outputs
+shard_out/
+shard_out_fail/
+demo_safe/
+demo_crash/
+
+# IDE
+.DS_Store
+.idea/
+.vscode/

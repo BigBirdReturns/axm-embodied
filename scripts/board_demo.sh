@@ -12,12 +12,12 @@ set -euo pipefail
 rm -rf demo_safe demo_crash shard_out shard_out_fail || true
 
 echo "== Step 1: Safe baseline (0 byte residuals) =="
-python tools/sim_robot.py --phase2 demo_safe --runs 1
+python tools/sim_robot_final.py --out demo_safe
 ls -lh demo_safe/capsule-*/cam_*.bin
 
 echo
 echo "== Step 2: Crash event and shard compile =="
-python tools/sim_robot.py --phase2 demo_crash --runs 1 --crash
+python tools/sim_robot_final.py --out demo_crash --crash
 axm-compile demo_crash/capsule-* shard_out
 
 echo

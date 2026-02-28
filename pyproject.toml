@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "axm-embodied-genesis"
-version = "1.2.0"
+name = "axm-embodied"
+version = "1.4.0"
 description = "Physical liability spoke of the AXM ecosystem"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -13,7 +13,7 @@ dependencies = [
   # ── Hub dependency ────────────────────────────────────────────────────
   # All cryptography (blake3, pynacl, dilithium-py) comes transitively
   # from axm-core. Embodied does not own or version the math layer.
-  "axm-core @ git+https://github.com/BigBirdReturns/axm-core.git@main",
+  "axm-core @ git+https://github.com/BigBirdReturns/axm-core.git@v1.0.0",
 
   # ── Embodied-specific ─────────────────────────────────────────────────
   # Heavy robotics/data deps that have no business in axm-core.

@@ -40,7 +40,7 @@ import click
 import numpy as np
 
 # ── Embodied-specific ─────────────────────────────────────────────────────
-from axm_core.protocol import (
+from axm_embodied_core.protocol import (
     REC_HEADER_LEN,
     REC_HEADER_FMT,
     FILE_HEADER_LEN,

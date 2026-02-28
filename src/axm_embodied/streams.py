@@ -11,7 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from axm_core.protocol import (
+from axm_embodied_core.protocol import (
     MAGIC_LATENT_FILE,
     MAGIC_LATENT_REC,
     MAGIC_RESID_REC,
@@ -188,7 +188,7 @@ class StrictJudge:
 
 
 def compile_streams_evidence(capsule_path: Path, out_path: Path) -> None:
-    """Build evidence/streams.parquet for Phase 2."""
+    """Build ext/streams@1.parquet for Phase 2."""
     judge = StrictJudge(capsule_path)
     evidence: list[dict] = []
 
@@ -248,4 +248,4 @@ def compile_streams_evidence(capsule_path: Path, out_path: Path) -> None:
     )
 
     table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
-    pq.write_table(table, Path(out_path) / "evidence/streams.parquet")
+    pq.write_table(table, Path(out_path) / "ext/streams@1.parquet")

@@ -12,7 +12,7 @@ span_id and prov_id have no genesis equivalent — physical telemetry
 byte ranges are embodied-specific. They stay local.
 
 Import contract for all embodied callers is unchanged:
-    from axm_core.ids import entity_id, claim_id, span_id, prov_id
+    # legacy fallback removed — delegates to axm_verify.identity via shim
 """
 from __future__ import annotations
 

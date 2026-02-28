@@ -4,7 +4,7 @@ Phase 2 "Heavy Evidence" using Pattern 2:
 
 - Event log is narrative (`events.jsonl`).
 - Disk artifacts are truth (`cam_latents.bin`, `cam_residuals.bin`).
-- StrictJudge scans residuals directly and asserts latent offsets to build `evidence/streams.parquet`.
+- StrictJudge scans residuals directly and asserts latent offsets to build `ext/streams@1.parquet`.
 - Compiler routes all crypto through `axm-core` hub. This repo owns no cryptographic primitives.
 
 ## Install

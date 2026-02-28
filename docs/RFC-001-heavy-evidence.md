@@ -59,7 +59,7 @@ Disk is truth.
 
 ## Evidence output
 
-The compiler emits `evidence/streams.parquet` with:
+The compiler emits `ext/streams@1.parquet` with:
 
 - frame_id
 - stream (latents or residuals)

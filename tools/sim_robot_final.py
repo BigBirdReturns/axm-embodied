@@ -4,7 +4,7 @@ from pathlib import Path
 from collections import deque
 
 
-from axm_core.protocol import (
+from axm_embodied_core.protocol import (
     MAGIC_LATENT_FILE,
     MAGIC_LATENT_REC,
     MAGIC_RESID_REC,
@@ -41,7 +41,7 @@ def _fake_vla_inference(selected: str) -> dict:
 
 # --- CONFIGURATION ---
 FPS = 10
-# LATENT_DIM imported from axm_core.protocol
+# LATENT_DIM imported from axm_embodied_core.protocol
 PRE_WINDOW_FRAMES = int(FPS * 2.0)  # 2 Seconds History
 POST_WINDOW_FRAMES = int(FPS * 2.0) # 2 Seconds Future + Trigger
 
@@ -176,5 +176,19 @@ def generate_session(out_dir, crash=False):
     }))
 
 if __name__ == "__main__":
-    generate_session("capsules_final", crash=False)
-    generate_session("capsules_final", crash=True)
+    import argparse
+    parser = argparse.ArgumentParser(description="AXM Flash Freeze simulator")
+    parser.add_argument("--out", default="capsules_final",
+                        help="Output directory for capsules (default: capsules_final)")
+    parser.add_argument("--crash", action="store_true",
+                        help="Simulate a crash event (wheel_slip + emergency_stop)")
+    parser.add_argument("--both", action="store_true",
+                        help="Run both a safe and a crash session (default behavior)")
+    args = parser.parse_args()
+
+    if args.both or (not args.crash and not args.both):
+        # Default: one safe + one crash session
+        generate_session(args.out, crash=False)
+        generate_session(args.out, crash=True)
+    else:
+        generate_session(args.out, crash=args.crash)
