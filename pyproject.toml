@@ -13,7 +13,7 @@ dependencies = [
   # ── Hub dependency ────────────────────────────────────────────────────
   # All cryptography (blake3, pynacl, dilithium-py) comes transitively
   # from axm-core. Embodied does not own or version the math layer.
-  "axm-core @ git+https://github.com/BigBirdReturns/axm-core.git@v1.0.0",
+  "axm-core @ git+https://github.com/BigBirdReturns/axm-core.git@v1.1.0",
 
   # ── Embodied-specific ─────────────────────────────────────────────────
   # Heavy robotics/data deps that have no business in axm-core.
@@ -25,10 +25,8 @@ dependencies = [
 
 [project.scripts]
 axm-bounds = "axm_embodied.bounds:main"
-# axm-compile installs the module entry point from src/axm_embodied/compile.py
-# axm-verify routes through the governance-aware logic wrapper
-axm-verify = "axm_verify.cli:main"
 axm-compile = "axm_embodied.compile:main"
+# axm-verify is provided by axm-genesis (transitive via axm-core)
 
 [tool.setuptools]
 package-dir = {"" = "src"}

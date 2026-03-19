@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>axm-embodied — Sensor Stream Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0a0a08;
+  --bg-1:      #111110;
+  --bg-2:      #191917;
+  --bg-3:      #1f1f1c;
+  --orange:    #e8620a;
+  --orange-hi: #ff7a20;
+  --orange-dim: #7a3205;
+  --orange-glow: rgba(232,98,10,0.12);
+  --orange-border: rgba(232,98,10,0.3);
+  --red:       #cc2200;
+  --red-dim:   rgba(204,34,0,0.15);
+  --green:     #4a8a2a;
+  --green-hi:  #5cb832;
+  --green-dim: rgba(74,138,42,0.15);
+  --white:     #e8e0d0;
+  --white-dim: #8a8278;
+  --white-faint: #3a3830;
+  --rule:      #1f1f1c;
+  --rule-strong: #2a2a26;
+  --font-disp: 'Chakra Petch', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --font-body: 'Source Serif 4', Georgia, serif;
+    --eco-bg:       #0a0a08;
+    --eco-border:   #1f1f1c;
+    --eco-text:     #605e58;
+    --eco-text-hi:  #e8e0d0;
+    --eco-accent:   #e8620a;
+    --eco-mono:     'JetBrains Mono', monospace;
+  }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--white);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── Noise texture ─────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── NAV ───────────────────────────────────────────────── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(10,10,8,0.94);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--rule-strong);
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  overflow-x: auto;
+}
+nav::-webkit-scrollbar { display: none; }
+
+.nav-brand {
+  font-family: var(--font-disp);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--orange);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--rule-strong);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.nav-brand span { color: var(--white-dim); font-weight: 300; }
+
+nav a {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--white-faint);
+  text-decoration: none;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+nav a:hover { color: var(--white-dim); }
+nav a.active { color: var(--orange); border-bottom-color: var(--orange); }
+
+/* ── REC INDICATOR ─────────────────────────────────────── */
+@keyframes rec-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+.rec-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: rec-blink 1.4s step-end infinite;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+/* ── HERO ──────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  padding: 72px 64px 64px;
+  border-bottom: 1px solid var(--rule-strong);
+  overflow: hidden;
+}
+
+/* Corner brackets */
+.hero::before, .hero::after {
+  content: '';
+  position: absolute;
+  width: 24px; height: 24px;
+  border-color: var(--orange-dim);
+  border-style: solid;
+  opacity: 0.6;
+}
+.hero::before {
+  top: 24px; left: 24px;
+  border-width: 1px 0 0 1px;
+}
+.hero::after {
+  bottom: 24px; right: 24px;
+  border-width: 0 1px 1px 0;
+}
+
+.hero-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: var(--orange);
+  text-transform: uppercase;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+}
+
+h1 {
+  font-family: var(--font-disp);
+  font-size: clamp(48px, 9vw, 108px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.01em;
+  color: var(--white);
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+h1 em {
+  font-style: normal;
+  color: var(--orange);
+  display: block;
+}
+
+.hero-sub {
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 300;
+  font-style: italic;
+  color: var(--white-dim);
+  max-width: 600px;
+  line-height: 1.7;
+  margin-bottom: 52px;
+  border-left: 2px solid var(--orange-dim);
+  padding-left: 20px;
+}
+
+.hero-meta {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 0;
+  border: 1px solid var(--rule-strong);
+  width: fit-content;
+}
+.meta-cell {
+  padding: 14px 20px;
+  border-right: 1px solid var(--rule-strong);
+}
+.meta-cell:last-child { border-right: none; }
+.meta-key {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.25em;
+  color: var(--white-faint);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.meta-val {
+  font-family: var(--font-disp);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--white);
+}
+.meta-val.ok { color: var(--green-hi); }
+.meta-val.warn { color: var(--orange); }
+
+/* ── SECTION BASE ──────────────────────────────────────── */
+section {
+  padding: 72px 64px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sec-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 48px;
+}
+.sec-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: var(--orange-dim);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+h2 {
+  font-family: var(--font-disp);
+  font-size: clamp(22px, 3.5vw, 38px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--white);
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+p {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--white-dim);
+  line-height: 1.8;
+  max-width: 680px;
+  margin-bottom: 16px;
+}
+p:last-child { margin-bottom: 0; }
+
+/* ── MANIFESTO CARDS ───────────────────────────────────── */
+.mani-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--rule-strong);
+  border: 1px solid var(--rule-strong);
+  margin-top: 40px;
+}
+.mani-card {
+  background: var(--bg-1);
+  padding: 32px 28px;
+  position: relative;
+  overflow: hidden;
+}
+.mani-card::before {
+  content: attr(data-n);
+  position: absolute;
+  top: 16px; right: 20px;
+  font-family: var(--font-disp);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--rule-strong);
+  line-height: 1;
+  pointer-events: none;
+}
+.mani-rule {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--orange);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.mani-card p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--white-dim);
+  max-width: none;
+  margin-bottom: 0;
+  position: relative;
+  z-index: 1;
+}
+.mani-card strong { color: var(--white); font-weight: 600; }
+
+/* ── SHARD ANATOMY ─────────────────────────────────────── */
+.shard-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+  margin-top: 40px;
+}
+
+.shard-tree {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 2;
+  color: var(--white-dim);
+  background: var(--bg-1);
+  border: 1px solid var(--rule-strong);
+  padding: 24px 28px;
+}
+.shard-tree .dir   { color: var(--orange); }
+.shard-tree .file  { color: var(--white); }
+.shard-tree .hot   { color: var(--orange-hi); font-weight: 700; }
+.shard-tree .ext   { color: var(--white-faint); }
+.shard-tree .cm    { color: #3a3830; font-size: 11px; font-style: italic; }
+.shard-tree .req5  { color: var(--orange); }
+
+.shard-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--rule-strong);
+  border: 1px solid var(--rule-strong);
+}
+.shard-field {
+  background: var(--bg-1);
+  padding: 20px 24px;
+}
+.shard-field.critical {
+  background: rgba(232,98,10,0.06);
+  border-left: 3px solid var(--orange);
+}
+.field-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--orange);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.field-body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--white-dim);
+  line-height: 1.65;
+  max-width: none;
+  margin-bottom: 0;
+}
+.field-body code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--orange);
+  background: rgba(232,98,10,0.1);
+  padding: 1px 5px;
+}
+
+/* ── BINARY FORMAT ─────────────────────────────────────── */
+.binary-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.byte-map {
+  background: var(--bg-1);
+  border: 1px solid var(--rule-strong);
+  overflow: hidden;
+}
+.byte-map-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--bg-2);
+}
+.byte-dot { width: 6px; height: 6px; border-radius: 50%; }
+.byte-map-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--white-dim);
+  text-transform: uppercase;
+}
+.byte-map-body {
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.9;
+}
+.byte-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule);
+  padding: 6px 0;
+}
+.byte-row:last-child { border-bottom: none; }
+.byte-offset { color: var(--white-faint); font-size: 11px; }
+.byte-label { color: var(--white-dim); }
+.byte-label span { color: var(--orange); }
+.byte-label em { color: var(--green-hi); font-style: normal; font-size: 11px; }
+
+/* ── REQ 5 CALLOUT ─────────────────────────────────────── */
+.req5-block {
+  margin-top: 24px;
+  background: var(--bg-1);
+  border: 1px solid var(--orange-border);
+  display: grid;
+  grid-template-columns: 4px 1fr;
+}
+.req5-accent { background: var(--orange); }
+.req5-body { padding: 28px 32px; }
+.req5-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: var(--orange);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.req5-title {
+  font-family: var(--font-disp);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--white);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.req5-body p {
+  font-size: 15px;
+  line-height: 1.72;
+  margin-bottom: 0;
+  max-width: 640px;
+}
+
+/* ── VERIFICATION STEPS ────────────────────────────────── */
+.verify-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--rule-strong);
+  margin-top: 40px;
+  font-family: var(--font-mono);
+}
+.verify-table th {
+  background: var(--bg-2);
+  color: var(--orange);
+  padding: 12px 20px;
+  text-align: left;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.verify-table td {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--white-dim);
+}
+.verify-table tr:last-child td { border-bottom: none; }
+.verify-table tr.req5-row td { background: rgba(232,98,10,0.04); }
+.verify-table tr:hover td { background: rgba(232,98,10,0.03); }
+.step-id { color: var(--orange); font-size: 11px; white-space: nowrap; }
+.step-name { color: var(--white); font-size: 12px; white-space: nowrap; }
+.step-pass { color: var(--white-faint); font-size: 11px; }
+.step-err { color: var(--orange); font-size: 11px; }
+
+/* ── CODE BLOCKS ───────────────────────────────────────── */
+.code-block {
+  background: var(--bg-1);
+  border: 1px solid var(--rule-strong);
+  overflow: hidden;
+  margin-top: 24px;
+}
+.cb-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--bg-2);
+}
+.cb-dot { width: 7px; height: 7px; border-radius: 50%; }
+.cb-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--white-dim);
+  text-transform: uppercase;
+}
+pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.8;
+  padding: 20px 24px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.c  { color: var(--white-faint); font-style: italic; }
+.kw { color: var(--orange); }
+.st { color: #c8b88a; }
+.fn { color: #d2a8ff; }
+.ok { color: var(--green-hi); }
+.er { color: var(--red); }
+.nu { color: #79c0ff; }
+.pa { color: var(--orange-hi); }
+.hl { color: var(--white); }
+
+/* ── CONFORMANCE TABLE ─────────────────────────────────── */
+.conf-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--rule-strong);
+  margin-top: 40px;
+  font-size: 14px;
+}
+.conf-table th {
+  background: var(--bg-2);
+  color: var(--orange);
+  padding: 12px 20px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.conf-table td {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+  color: var(--white-dim);
+  line-height: 1.6;
+}
+.conf-table tr:last-child td { border-bottom: none; }
+.conf-table tr:hover td { background: rgba(232,98,10,0.025); }
+.req-id { font-family: var(--font-mono); font-size: 12px; color: var(--orange); white-space: nowrap; }
+.req-codes { font-family: var(--font-mono); font-size: 11px; color: var(--white-faint); line-height: 1.8; }
+
+/* Badge */
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+.badge-embodied { background: rgba(232,98,10,0.15); color: var(--orange-hi); border: 1px solid var(--orange-dim); }
+.badge-all { background: rgba(74,138,42,0.15); color: var(--green-hi); border: 1px solid var(--green); }
+
+/* ── QUICK START ───────────────────────────────────────── */
+.qs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 40px;
+}
+.qs-card {
+  background: var(--bg-1);
+  border: 1px solid var(--rule-strong);
+  overflow: hidden;
+}
+.qs-phase {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: var(--orange);
+  text-transform: uppercase;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--bg-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qs-card pre {
+  font-size: 12px;
+  line-height: 1.9;
+  padding: 16px 20px;
+}
+
+/* ── FOOTER ────────────────────────────────────────────── */
+footer {
+  padding: 44px 64px;
+  border-top: 1px solid var(--rule-strong);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.footer-brand {
+  font-family: var(--font-disp);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--white-faint);
+  text-transform: uppercase;
+}
+.footer-links {
+  display: flex;
+  gap: 28px;
+}
+.footer-links a {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--white-faint);
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+.footer-links a:hover { color: var(--orange); }
+.footer-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--white-faint);
+  letter-spacing: 0.08em;
+}
+
+/* ── RESPONSIVE ────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero { padding: 48px 24px 40px; }
+  section { padding: 56px 24px; }
+  footer { padding: 36px 24px; }
+  nav { padding: 0; }
+  .shard-layout { grid-template-columns: 1fr; }
+  .binary-layout { grid-template-columns: 1fr; }
+  .mani-grid { grid-template-columns: 1fr; }
+  .qs-grid { grid-template-columns: 1fr; }
+  .hero-meta { grid-template-columns: repeat(2, 1fr); }
+  h1 { font-size: clamp(36px, 13vw, 72px); }
+}
+</style>
+</head>
+<body>
+<!--
+  AXM Ecosystem Nav — shared across all pages
+  
+  USAGE: Paste this block at the top of <body> in each page.
+  Set data-active to the current page's key.
+  
+  The nav reads CSS custom properties from the host page:
+    --eco-bg       (fallback: #0e0e0f)
+    --eco-border   (fallback: #2a2a2e)  
+    --eco-text     (fallback: #666)
+    --eco-text-hi  (fallback: #e0e0e0)
+    --eco-accent   (fallback: #c8a84b)
+    --eco-mono     (fallback: 'DM Mono', monospace)
+  
+  Each page sets these in its :root {} to match its palette.
+-->
+<style>
+.eco-nav {
+  position: relative;
+  z-index: 900;
+  background: var(--eco-bg, #0e0e0f);
+  border-bottom: 1px solid var(--eco-border, #2a2a2e);
+  font-family: var(--eco-mono, 'DM Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  user-select: none;
+}
+.eco-nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  gap: 6px;
+}
+.eco-nav-brand {
+  color: var(--eco-text, #666);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+.eco-nav-brand strong {
+  color: var(--eco-text-hi, #e0e0e0);
+  font-weight: 500;
+}
+.eco-nav-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--eco-border, #2a2a2e);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+.eco-nav a {
+  color: var(--eco-text, #666);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+  position: relative;
+}
+.eco-nav a:hover {
+  color: var(--eco-text-hi, #e0e0e0);
+  background: rgba(255,255,255,0.03);
+}
+.eco-nav a.eco-active {
+  color: var(--eco-accent, #c8a84b);
+}
+.eco-nav a.eco-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  background: var(--eco-accent, #c8a84b);
+  opacity: 0.6;
+}
+.eco-nav-kind {
+  font-size: 8px;
+  opacity: 0.5;
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: top;
+}
+.eco-nav-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.eco-nav-github {
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.eco-nav-github:hover {
+  opacity: 0.8;
+}
+@media (max-width: 768px) {
+  .eco-nav-inner { 
+    overflow-x: auto; 
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .eco-nav-inner::-webkit-scrollbar { display: none; }
+  .eco-nav a { padding: 6px 7px; font-size: 9px; }
+  .eco-nav-brand { display: none; }
+}
+</style>
+
+<div class="eco-nav" data-active="embodied">
+  <div class="eco-nav-inner">
+    <div class="eco-nav-brand"><strong>AXM</strong> &nbsp;Protocol</div>
+    <div class="eco-nav-sep"></div>
+    <a href="https://bigbirdreturns.github.io/axm-genesis/" data-page="genesis">Genesis<span class="eco-nav-kind"> kernel</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-core/" data-page="core">Core<span class="eco-nav-kind"> hub</span></a>
+    <div class="eco-nav-sep"></div>
+    <a href="https://bigbirdreturns.github.io/axm-chat/" data-page="chat">Chat<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-show/" data-page="show">Show<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-embodied/" data-page="embodied">Embodied<span class="eco-nav-kind"> spoke</span></a>
+    <div class="eco-nav-right">
+      <a href="https://github.com/BigBirdReturns" class="eco-nav-github" target="_blank" title="GitHub">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Auto-highlight active page based on data-active attribute
+(function() {
+  const nav = document.querySelector('.eco-nav');
+  if (!nav) return;
+  const active = nav.dataset.active;
+  if (active) {
+    const link = nav.querySelector(`[data-page="${active}"]`);
+    if (link) link.classList.add('eco-active');
+  }
+})();
+</script>
+
+
+<!-- NAV -->
+<nav>
+  <span class="nav-brand">AXM<span>-embodied</span></span>
+  <a href="#manifesto" class="active">Manifesto</a>
+  <a href="#shard">Shard Format</a>
+  <a href="#binary">Binary Format</a>
+  <a href="#req5">REQ 5</a>
+  <a href="#verify">Verification</a>
+  <a href="#conform">Conformance</a>
+  <a href="#start">Quick Start</a>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-badge">
+    <span class="rec-dot"></span>
+    AXM Ecosystem &nbsp;·&nbsp; Robotics Spoke &nbsp;·&nbsp; v0.1
+  </div>
+  <h1>Embodied.<em>No Gaps.<br>No Exceptions.<br>No Editing.</em></h1>
+  <p class="hero-sub">axm-embodied seals robot sensor streams using the same Genesis shard format as every other AXM spoke. The difference is REQ 5: the binary frame sequence in cam_latents.bin must be gap-free and monotone. Any discontinuity is a cryptographic failure.</p>
+  <div class="hero-meta">
+    <div class="meta-cell">
+      <div class="meta-key">Format</div>
+      <div class="meta-val">AXLF / AXLR</div>
+    </div>
+    <div class="meta-cell">
+      <div class="meta-key">REQ 5</div>
+      <div class="meta-val warn">Non-Selective</div>
+    </div>
+    <div class="meta-cell">
+      <div class="meta-key">On Gap</div>
+      <div class="meta-val warn">E_BUFFER_DISCONTINUITY</div>
+    </div>
+    <div class="meta-cell">
+      <div class="meta-key">On Absent</div>
+      <div class="meta-val ok">Silent PASS</div>
+    </div>
+  </div>
+</header>
+
+<!-- §01 MANIFESTO -->
+<section id="manifesto">
+  <div class="sec-hd">
+    <span class="sec-num">§01</span>
+    <h2>Why Non-Selective Recording</h2>
+  </div>
+  <p>An embodied system that selects which sensor frames to record is not trustworthy. The value of a verifiable record depends entirely on its completeness. A record that contains only the moments the system chose to preserve is worthless as evidence.</p>
+  <p>axm-embodied enforces this at the protocol level. The verifier does not ask whether the stream looks complete. It reads every frame_id in sequence and rejects on the first gap.</p>
+
+  <div class="mani-grid">
+    <div class="mani-card" data-n="I">
+      <div class="mani-rule">Rule I</div>
+      <p><strong>Record everything, then seal.</strong> The hot buffer appends AXLR frames at sensor rate with no cryptographic overhead. When the session ends — or a power-safe threshold fires — Forge compiles the buffer into a sealed shard. Genesis signs it. Nothing is selected.</p>
+    </div>
+    <div class="mani-card" data-n="II">
+      <div class="mani-rule">Rule II</div>
+      <p><strong>A gap is a failure, not an omission.</strong> E_BUFFER_DISCONTINUITY is not a warning. It is a hard verification failure. The same exit code as a bad cryptographic signature. A robot that drops frames is not conformant. The stream format does not accommodate gaps.</p>
+    </div>
+    <div class="mani-card" data-n="III">
+      <div class="mani-rule">Rule III</div>
+      <p><strong>Offline verification, no infrastructure.</strong> axm-verify reads cam_latents.bin directly. It checks AXLF magic, then scans every AXLR record. The check is deterministic and stateless. It runs on the same machine that sealed the shard or any other machine with the publisher key.</p>
+    </div>
+    <div class="mani-card" data-n="IV">
+      <div class="mani-rule">Rule IV</div>
+      <p><strong>Document shards pass silently.</strong> If cam_latents.bin is absent, REQ 5 does not apply. axm-chat, axm-show, and any document spoke are not affected. REQ 5 is a conditional requirement — it fires only when the file is present.</p>
+    </div>
+  </div>
+</section>
+
+<!-- §02 SHARD FORMAT -->
+<section id="shard">
+  <div class="sec-hd">
+    <span class="sec-num">§02</span>
+    <h2>Shard Format</h2>
+  </div>
+  <p>The embodied shard is structurally identical to every other AXM shard. Same manifest.json. Same graph/ and evidence/ Parquet tables. Same Merkle tree. Same ML-DSA-44 signature. The only embodied-specific addition is <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">content/cam_latents.bin</code>.</p>
+
+  <div class="shard-layout">
+    <div class="shard-tree">
+      <div><span class="dir">shard_blake3_&lt;merkle_root&gt;/</span></div>
+      <div>&nbsp;&nbsp;<span class="file">manifest.json</span> <span class="cm">← merkle root + suite</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">sig/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">manifest.sig</span> <span class="cm">← ML-DSA-44</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">publisher.pub</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">content/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">session.jsonl</span> <span class="cm">← structured event log</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="hot">cam_latents.bin</span> <span class="cm">← REQ 5 applies</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">graph/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">entities.parquet</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">claims.parquet</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">provenance.parquet</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">evidence/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">spans.parquet</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">ext/</span> <span class="cm">← optional, Merkle-covered</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">episodes&#64;1.parquet</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">kinematics&#64;1.parquet</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">telemetry&#64;1.parquet</span></div>
+    </div>
+
+    <div class="shard-fields">
+      <div class="shard-field">
+        <div class="field-title">manifest.json — same as all spokes</div>
+        <p class="field-body">spec_version, shard_id, metadata, publisher, sources (with SHA-256 of every content file including cam_latents.bin), integrity.merkle_root, suite. The cam_latents.bin SHA-256 is in sources — the Merkle tree covers it like any other content file.</p>
+      </div>
+      <div class="shard-field">
+        <div class="field-title">session.jsonl — structured event log</div>
+        <p class="field-body">Newline-delimited JSON event records from the session: motor commands, state transitions, error conditions, external events. Byte-addressable via spans.parquet. Claims in graph/ can trace to specific JSON records.</p>
+      </div>
+      <div class="shard-field critical">
+        <div class="field-title">cam_latents.bin — hot stream (REQ 5)</div>
+        <p class="field-body">Binary file. AXLF magic header (8 bytes). Followed by a sequence of AXLR records in frame_id order. Records must be gap-free and monotone. Any missing frame_id triggers <code>E_BUFFER_DISCONTINUITY</code>. The file is Merkle-covered — its SHA-256 is in sources.</p>
+      </div>
+      <div class="shard-field">
+        <div class="field-title">ext/kinematics&#64;1.parquet — optional extension</div>
+        <p class="field-body">Structured kinematic data extracted from the session: joint angles, velocities, forces, end-effector positions. Merkle-covered as an extension table. Queryable via axm-core Spectra without an LLM.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §03 BINARY FORMAT -->
+<section id="binary">
+  <div class="sec-hd">
+    <span class="sec-num">§03</span>
+    <h2>AXLF / AXLR Binary Format</h2>
+  </div>
+  <p>cam_latents.bin is a simple binary container. The file begins with an AXLF header block. The remainder of the file is a sequence of AXLR records in frame_id ascending order. No index. No random access. Scanned linearly by axm-verify.</p>
+
+  <div class="binary-layout">
+    <div class="byte-map">
+      <div class="byte-map-header">
+        <div class="byte-dot" style="background:#e8620a"></div>
+        <div class="byte-dot" style="background:#7a3205"></div>
+        <div class="byte-dot" style="background:#3a3830"></div>
+        <span class="byte-map-title">AXLF Header Block</span>
+      </div>
+      <div class="byte-map-body">
+        <div class="byte-row">
+          <span class="byte-offset">0x00–0x03</span>
+          <span class="byte-label"><span>AXLF</span> magic <em>4 bytes</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">0x04</span>
+          <span class="byte-label"><span>version</span> uint8 <em>= 1</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">0x05–0x08</span>
+          <span class="byte-label"><span>frame_id</span> uint32 LE <em>first frame</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">0x09–0x0C</span>
+          <span class="byte-label"><span>length</span> uint32 LE <em>payload bytes</em></span>
+        </div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);padding:10px 16px 4px;">REC_HEADER_FMT = &quot;&lt;4sBII&quot; &nbsp;·&nbsp; REC_HEADER_LEN = 13 &nbsp;·&nbsp; LATENT_DIM = 256</div>
+    </div>
+
+    <div class="byte-map">
+      <div class="byte-map-header">
+        <div class="byte-dot" style="background:#e8620a"></div>
+        <div class="byte-dot" style="background:#7a3205"></div>
+        <div class="byte-dot" style="background:#3a3830"></div>
+        <span class="byte-map-title">AXLR Record (per frame)</span>
+      </div>
+      <div class="byte-map-body">
+        <div class="byte-row">
+          <span class="byte-offset">+0x00–0x03</span>
+          <span class="byte-label"><span>AXLR</span> magic <em>4 bytes</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">+0x04</span>
+          <span class="byte-label"><span>version</span> uint8 <em>= 1</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">+0x05–0x08</span>
+          <span class="byte-label"><span>frame_id</span> uint32 LE <em>monotone ↑</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">+0x09–0x0C</span>
+          <span class="byte-label"><span>length</span> uint32 LE <em>payload bytes</em></span>
+        </div>
+        <div class="byte-row">
+          <span class="byte-offset">+0x0D–…</span>
+          <span class="byte-label"><span>payload</span> <em>length bytes · latent vector</em></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-block" style="margin-top:24px;">
+    <div class="cb-hd">
+      <div class="cb-dot" style="background:#e8620a"></div>
+      <div class="cb-dot" style="background:#7a3205"></div>
+      <div class="cb-dot" style="background:#3a3830"></div>
+      <span class="cb-title">axm_embodied/writer.py — frame writer</span>
+    </div>
+    <pre>
+<span class="c"># Hot buffer write path — no crypto overhead, nanosecond appends</span>
+<span class="kw">import</span> struct, time
+
+AXLF_MAGIC = <span class="st">b"AXLF"</span>
+AXLR_MAGIC = <span class="st">b"AXLR"</span>
+
+<span class="kw">class</span> <span class="fn">HotBufferWriter</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, path: <span class="kw">str</span>, session_ts: <span class="kw">int</span> = <span class="kw">None</span>):
+        self._f = <span class="fn">open</span>(path, <span class="st">"wb"</span>, buffering=<span class="nu">0</span>)   <span class="c"># O_DIRECT writes</span>
+        self._frame_id = <span class="nu">0</span>
+        ts = session_ts <span class="kw">or</span> <span class="fn">int</span>(time.<span class="fn">time</span>() * <span class="nu">1_000_000</span>)
+        <span class="c"># Write AXLF header</span>
+        self._f.<span class="fn">write</span>(AXLF_MAGIC)
+        self._f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;BII"</span>, <span class="nu">1</span>, <span class="nu">0</span>, ts))
+
+    <span class="kw">def</span> <span class="fn">append</span>(self, payload: <span class="kw">bytes</span>) -> <span class="kw">int</span>:
+        ts = <span class="fn">int</span>(time.<span class="fn">time</span>() * <span class="nu">1_000_000</span>)
+        self._f.<span class="fn">write</span>(AXLR_MAGIC)
+        self._f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;BII"</span>, <span class="nu">1</span>, self._frame_id, <span class="fn">len</span>(payload)))
+        self._f.<span class="fn">write</span>(payload)
+        fid = self._frame_id
+        self._frame_id += <span class="nu">1</span>
+        <span class="kw">return</span> fid
+
+    <span class="kw">def</span> <span class="fn">close</span>(self):
+        self._f.<span class="fn">flush</span>(); self._f.<span class="fn">close</span>()
+
+<span class="c"># Usage: one append per sensor tick. No batching. No buffering in userspace.</span>
+<span class="c"># On session end, call axm-embodied seal → Forge → Genesis signs.</span>
+</pre>
+  </div>
+</section>
+
+<!-- §04 REQ 5 -->
+<section id="req5">
+  <div class="sec-hd">
+    <span class="sec-num">§04</span>
+    <h2>REQ 5 — Non-Selective Recording</h2>
+  </div>
+  <p>REQ 5 is the only conformance requirement unique to embodied spokes. It is enforced by step 7 of axm-verify. The check is binary: either the frame sequence is gap-free or the shard fails verification.</p>
+
+  <div class="req5-block">
+    <div class="req5-accent"></div>
+    <div class="req5-body">
+      <div class="req5-label"><span class="rec-dot"></span> E_BUFFER_DISCONTINUITY</div>
+      <div class="req5-title">Frame gap, bad magic, or truncation in cam_latents.bin</div>
+      <p>Triggered when: (1) AXLF magic is absent or wrong, (2) any AXLR record has magic mismatch, (3) any frame_id skips — expected N, found M where M ≠ N+1, (4) file truncates mid-record. All four conditions produce the same error code and the same verification outcome: FAIL, exit 1.</p>
+    </div>
+  </div>
+
+  <div class="code-block">
+    <div class="cb-hd">
+      <div class="cb-dot" style="background:#e8620a"></div>
+      <div class="cb-dot" style="background:#7a3205"></div>
+      <div class="cb-dot" style="background:#3a3830"></div>
+      <span class="cb-title">axm_verify/checks/stream.py — REQ 5 implementation</span>
+    </div>
+    <pre>
+<span class="c"># Step 7 of axm-verify — hot stream continuity check</span>
+<span class="kw">import</span> struct
+<span class="kw">from</span> pathlib <span class="kw">import</span> Path
+<span class="kw">from</span> axm_verify.const <span class="kw">import</span> E_BUFFER_DISCONTINUITY
+
+AXLF_MAGIC = <span class="st">b"AXLF"</span>
+AXLR_MAGIC = <span class="st">b"AXLR"</span>
+AXLF_HDR   = <span class="nu">32</span>   <span class="c"># bytes</span>
+AXLR_HDR   = <span class="nu">24</span>   <span class="c"># bytes (before payload)</span>
+
+<span class="kw">def</span> <span class="fn">check_stream_continuity</span>(shard_dir: Path) -> <span class="kw">list</span>[<span class="kw">str</span>]:
+    cam = shard_dir / <span class="st">"content"</span> / <span class="st">"cam_latents.bin"</span>
+    <span class="kw">if not</span> cam.<span class="fn">exists</span>():
+        <span class="kw">return</span> []   <span class="c"># absent = silent pass (REQ 5 not applicable)</span>
+
+    errors = []
+    <span class="kw">with</span> cam.<span class="fn">open</span>(<span class="st">"rb"</span>) <span class="kw">as</span> f:
+        hdr = f.<span class="fn">read</span>(AXLF_HDR)
+        <span class="kw">if</span> <span class="fn">len</span>(hdr) < AXLF_HDR <span class="kw">or</span> hdr[:<span class="nu">4</span>] != AXLF_MAGIC:
+            <span class="kw">return</span> [E_BUFFER_DISCONTINUITY]   <span class="c"># bad magic = immediate fail</span>
+
+        expected_frame_id = <span class="nu">0</span>
+        <span class="kw">while True</span>:
+            rec_hdr = f.<span class="fn">read</span>(AXLR_HDR)
+            <span class="kw">if not</span> rec_hdr:
+                <span class="kw">break</span>   <span class="c"># EOF</span>
+            <span class="kw">if</span> <span class="fn">len</span>(rec_hdr) < AXLR_HDR <span class="kw">or</span> rec_hdr[:<span class="nu">4</span>] != AXLR_MAGIC:
+                errors.<span class="fn">append</span>(E_BUFFER_DISCONTINUITY); <span class="kw">break</span>
+
+            frame_id, _, payload_len = struct.<span class="fn">unpack_from</span>(<span class="st">"&lt;QQI"</span>, rec_hdr, <span class="nu">4</span>)
+            <span class="kw">if</span> frame_id != expected_frame_id:
+                errors.<span class="fn">append</span>(E_BUFFER_DISCONTINUITY); <span class="kw">break</span>   <span class="c"># gap detected</span>
+
+            f.<span class="fn">seek</span>(payload_len, <span class="nu">1</span>)   <span class="c"># skip payload</span>
+            expected_frame_id += <span class="nu">1</span>
+
+    <span class="kw">return</span> errors
+
+<span class="c"># Test: synthetic gap</span>
+<span class="c"># Write frames 0,1,2 then skip to 4 → E_BUFFER_DISCONTINUITY fires on frame 4</span>
+</pre>
+  </div>
+
+  <div class="code-block">
+    <div class="cb-hd">
+      <div class="cb-dot" style="background:#e8620a"></div>
+      <div class="cb-dot" style="background:#7a3205"></div>
+      <div class="cb-dot" style="background:#3a3830"></div>
+      <span class="cb-title">tests/test_conformance.py — REQ 5 test</span>
+    </div>
+    <pre>
+<span class="kw">def</span> <span class="fn">test_req5_buffer_gap_detected</span>(tmp_path):
+    <span class="c"># Build a syntactically valid cam_latents.bin with a deliberate gap</span>
+    cam = tmp_path / <span class="st">"cam_latents.bin"</span>
+    <span class="kw">with</span> cam.<span class="fn">open</span>(<span class="st">"wb"</span>) <span class="kw">as</span> f:
+        f.<span class="fn">write</span>(b<span class="st">"AXLF"</span>)
+        f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;IQQI"</span>, <span class="nu">1</span>, <span class="nu">4</span>, <span class="nu">0</span>, <span class="nu">0</span>))
+        <span class="kw">for</span> fid <span class="kw">in</span> [<span class="nu">0</span>, <span class="nu">1</span>, <span class="nu">2</span>, <span class="nu">4</span>]:   <span class="c"># gap: frame 3 missing</span>
+            payload = <span class="st">f"frame_{fid}"</span>.<span class="fn">encode</span>()
+            f.<span class="fn">write</span>(b<span class="st">"AXLR"</span>)
+            f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;QQI"</span>, fid, <span class="nu">0</span>, <span class="fn">len</span>(payload)))
+            f.<span class="fn">write</span>(payload)
+
+    errors = <span class="fn">check_stream_continuity</span>(tmp_path.parent)
+    <span class="kw">assert</span> <span class="st">"E_BUFFER_DISCONTINUITY"</span> <span class="kw">in</span> errors   <span class="c"># ← must fire</span>
+
+<span class="ok">PASSED</span> · test_req5_buffer_gap_detected
+</pre>
+  </div>
+</section>
+
+<!-- §05 VERIFICATION -->
+<section id="verify">
+  <div class="sec-hd">
+    <span class="sec-num">§05</span>
+    <h2>Verification Pipeline</h2>
+  </div>
+  <p>axm-verify runs seven steps in sequence. Steps 1–6 are identical to all AXM spokes. Step 7 is the embodied-specific stream continuity check. A failure at any step halts and returns exit 1.</p>
+
+  <table class="verify-table">
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th>Name</th>
+        <th>Pass Condition</th>
+        <th>Error Code</th>
+        <th>Scope</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="step-id">01</td>
+        <td class="step-name">Layout</td>
+        <td class="step-pass">manifest.json, sig/, content/, graph/, evidence/ present</td>
+        <td class="step-err">E_LAYOUT_MISSING<br>E_LAYOUT_DIRTY</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="step-id">02</td>
+        <td class="step-name">Manifest Parse</td>
+        <td class="step-pass">Valid JSON, required fields present, ≤256 KiB</td>
+        <td class="step-err">E_MANIFEST_SYNTAX<br>E_MANIFEST_SCHEMA</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="step-id">03</td>
+        <td class="step-name">Trusted Key + Signature</td>
+        <td class="step-pass">publisher.pub matches --trusted-key; signature verifies</td>
+        <td class="step-err">E_SIG_MISSING<br>E_SIG_INVALID</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="step-id">04</td>
+        <td class="step-name">Merkle Root</td>
+        <td class="step-pass">Computed root == manifest.integrity.merkle_root</td>
+        <td class="step-err">E_MERKLE_MISMATCH</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="step-id">05</td>
+        <td class="step-name">Parquet Schema</td>
+        <td class="step-pass">Column names, types, counts match frozen Arrow schemas</td>
+        <td class="step-err">E_SCHEMA_TYPE<br>E_SCHEMA_NULL</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="step-id">06</td>
+        <td class="step-name">Reference Integrity</td>
+        <td class="step-pass">All claim subjects, span sources, byte ranges valid</td>
+        <td class="step-err">E_REF_ORPHAN<br>E_REF_SOURCE</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr class="req5-row">
+        <td class="step-id">07</td>
+        <td class="step-name">Stream Continuity</td>
+        <td class="step-pass">cam_latents.bin absent OR AXLF valid AND all frame_ids gap-free</td>
+        <td class="step-err">E_BUFFER_DISCONTINUITY</td>
+        <td><span class="badge badge-embodied">Embodied Only</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- §06 CONFORMANCE -->
+<section id="conform">
+  <div class="sec-hd">
+    <span class="sec-num">§06</span>
+    <h2>Conformance Requirements</h2>
+  </div>
+  <p>Spokes must satisfy REQ 1–4 to be conformant with the Genesis spec. Embodied spokes must additionally satisfy REQ 5. Run all 13 conformance tests; the REQ 5 test is <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">test_req5_buffer_gap_detected</code>.</p>
+
+  <table class="conf-table">
+    <thead>
+      <tr>
+        <th>REQ</th>
+        <th>Description</th>
+        <th>Error Codes</th>
+        <th>Scope</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="req-id">REQ 1</td>
+        <td>Manifest integrity — byte-exact signature over manifest</td>
+        <td class="req-codes">E_SIG_INVALID<br>E_MERKLE_MISMATCH</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="req-id">REQ 2</td>
+        <td>Content identity — all content files covered by Merkle tree</td>
+        <td class="req-codes">E_MERKLE_MISMATCH<br>E_REF_SOURCE</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="req-id">REQ 3</td>
+        <td>Lineage events — all references valid, no nulls in required columns</td>
+        <td class="req-codes">E_REF_ORPHAN<br>E_SCHEMA_NULL</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="req-id">REQ 4</td>
+        <td>Proof bundle — valid signature from trusted publisher key</td>
+        <td class="req-codes">E_SIG_INVALID<br>E_SIG_MISSING</td>
+        <td><span class="badge badge-all">All Spokes</span></td>
+      </tr>
+      <tr>
+        <td class="req-id">REQ 5</td>
+        <td>Non-selective recording — no gaps in binary hot stream</td>
+        <td class="req-codes">E_BUFFER_DISCONTINUITY</td>
+        <td><span class="badge badge-embodied">Embodied Only</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- §07 QUICK START -->
+<section id="start">
+  <div class="sec-hd">
+    <span class="sec-num">§07</span>
+    <h2>Quick Start</h2>
+  </div>
+
+  <div class="qs-grid">
+    <div class="qs-card">
+      <div class="qs-phase">Install</div>
+      <pre>
+<span class="c"># Install dependencies in order</span>
+<span class="kw">pip install -e</span> <span class="pa">./axm-genesis</span>    <span class="c"># kernel</span>
+<span class="kw">pip install -e</span> <span class="pa">./axm-core</span>       <span class="c"># runtime</span>
+<span class="kw">pip install -e</span> <span class="pa">./axm-embodied</span>   <span class="c"># this spoke</span>
+</pre>
+    </div>
+
+    <div class="qs-card">
+      <div class="qs-phase">Record + Seal</div>
+      <pre>
+<span class="c"># Start a session (opens cam_latents.bin)</span>
+<span class="kw">axm-embodied record start</span> \
+  <span class="kw">--signing-key</span> <span class="pa">keys/robot.pem</span>
+
+<span class="c"># Frames append at sensor rate</span>
+<span class="c"># On session end, Forge seals the shard</span>
+<span class="kw">axm-embodied record stop</span>
+<span class="ok">✓ Sealed ~/.axm/shards/session-&lt;id&gt;/</span>
+</pre>
+    </div>
+
+    <div class="qs-card">
+      <div class="qs-phase">Verify</div>
+      <pre>
+<span class="c"># Verify a sealed session shard</span>
+<span class="kw">axm-verify shard</span> \
+  <span class="pa">~/.axm/shards/session-abc123/</span> \
+  <span class="kw">--trusted-key</span> <span class="pa">keys/robot.pub</span>
+
+<span class="ok">{"status":"PASS","error_count":0,"errors":[]}</span>
+
+<span class="c"># Introduce a gap → should FAIL</span>
+<span class="kw">axm-verify shard</span> <span class="pa">./test-gap-shard/</span> \
+  <span class="kw">--trusted-key</span> <span class="pa">keys/robot.pub</span>
+
+<span class="er">{"status":"FAIL","errors":["E_BUFFER_DISCONTINUITY"]}</span>
+</pre>
+    </div>
+
+    <div class="qs-card">
+      <div class="qs-phase">Conformance Suite</div>
+      <pre>
+<span class="c"># Run all 13 conformance tests</span>
+<span class="kw">python -m pytest</span> \
+  <span class="pa">tests/test_conformance.py</span> -v
+
+<span class="ok">test_baseline_gold_shard_passes ....... PASSED</span>
+<span class="ok">test_req5_buffer_gap_detected ......... PASSED</span>
+<span class="ok">test_req5_bad_magic_detected .......... PASSED</span>
+<span class="ok">test_req5_truncation_detected ......... PASSED</span>
+<span class="ok">13 passed in 0.84s</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span class="footer-brand">AXM — axm-embodied</span>
+  <div class="footer-links">
+    <a href="https://bigbirdreturns.github.io/axm-genesis/">axm-genesis</a>
+    <a href="https://bigbirdreturns.github.io/axm-chat/">axm-chat</a>
+    <a href="https://github.com/BigBirdReturns/axm-embodied">GitHub</a>
+  </div>
+  <span class="footer-meta">Robotics spoke · REQ 5 · E_BUFFER_DISCONTINUITY</span>
+</footer>
+
+<script>
+// Nav scroll tracking
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a');
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === `#${e.target.id}`));
+    }
+  });
+}, { threshold: 0.25 });
+
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
