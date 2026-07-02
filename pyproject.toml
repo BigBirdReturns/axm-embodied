@@ -4,29 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axm-embodied"
-version = "1.4.0"
-description = "Physical liability spoke of the AXM ecosystem"
+version = "2.0.0"
+description = "Physical liability spoke of the AXM ecosystem: Flash Freeze flight recorder + Shadow Runtime envelope enforcement"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = [
-  # ── Hub dependency ────────────────────────────────────────────────────
-  # All cryptography (blake3, pynacl, dilithium-py) comes transitively
-  # from axm-core. Embodied does not own or version the math layer.
-  "axm-core @ git+https://github.com/BigBirdReturns/axm-core.git@v1.1.0",
+  # ── Kernel dependency ─────────────────────────────────────────────────
+  # All cryptography (blake3, pynacl, ML-DSA-44) and all shard
+  # construction/verification comes from the axm-genesis kernel. Embodied
+  # does not own or version the math layer.
+  # NOTE: pinned to the feature branch until the extra_content/streams@1
+  # kernel additions merge; repin to a tagged release after that.
+  "axm-genesis[mldsa-compat] @ git+https://github.com/BigBirdReturns/axm-genesis.git@claude/embodied-repo-flight-recorder-pg8x01",
 
   # ── Embodied-specific ─────────────────────────────────────────────────
-  # Heavy robotics/data deps that have no business in axm-core.
-  "pandas>=2.0.0",
-  "pyarrow>=14.0.0",
-  "click>=8.0.0",
   "numpy>=1.24.0",
+  "click>=8.0.0",
 ]
 
 [project.scripts]
 axm-bounds = "axm_embodied.bounds:main"
 axm-compile = "axm_embodied.compile:main"
-# axm-verify is provided by axm-genesis (transitive via axm-core)
+axm-runtime = "axm_embodied.runtime_cli:main"
+# axm-verify and axm-build are provided by axm-genesis
 
 [tool.setuptools]
 package-dir = {"" = "src"}

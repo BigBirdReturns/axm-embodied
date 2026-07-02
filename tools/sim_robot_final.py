@@ -1,194 +1,58 @@
-import json, random, uuid, struct, os
-from datetime import datetime
-from pathlib import Path
-from collections import deque
+#!/usr/bin/env python3
+"""Flash Freeze simulator — capsule generator harness.
+
+The recorder itself lives in the library (`axm_embodied.recorder`); this
+script only drives it with simulated missions (`axm_embodied.sim`). A
+safe run leaves a 0-byte cold stream; a crash run injects a wheel-slip
+physics excursion at frame 50 and triggers Flash Freeze exactly as the
+Shadow Runtime would.
+
+For the full enforcement loop (Law Gate, signed envelope, ESTOP, incident
+shard), use `axm-runtime fly` instead.
+"""
+from __future__ import annotations
+
+import argparse
+
+from axm_embodied.recorder import CapsuleRecorder
+from axm_embodied.sim import mission_frames
 
 
-from axm_embodied_core.protocol import (
-    MAGIC_LATENT_FILE,
-    MAGIC_LATENT_REC,
-    MAGIC_RESID_REC,
-    VERSION,
-    REC_HEADER_FMT,
-    REC_HEADER_LEN,
-    DEFAULT_MAX_RESIDUAL_SIZE,
-    LATENT_DIM,
-    LATENT_REC_LEN,
-)
+def generate_session(out_dir: str, crash: bool = False, frames: int = 100,
+                     seed: int | None = None, robot_id: str = "sim-final") -> None:
+    fault_at = frames // 2 if crash else None
+    with CapsuleRecorder(out_dir, robot_id=robot_id) as rec:
+        print(f"Generating: {rec.session_id} (Crash={crash})")
+        for fr in mission_frames(frames=frames, seed=seed, fault_at=fault_at):
+            is_fault = fr.event is not None and fr.event.get("evt") == "wheel_slip"
+            if is_fault:
+                # Tier-1 trigger: flush the pre-window BEFORE recording the
+                # trigger frame so the frame lands inside the post-window.
+                rec.trigger()
+            rec.record_frame(
+                fr.latents,
+                "emergency_stop" if is_fault else fr.selected_action,
+                fr.action_distribution,
+                residual=fr.residual,
+                event=fr.event,
+            )
+    print(f"  capsule: {rec.path}")
 
-# ── Mens Rea: VLA action distribution ────────────────────────────────────
-_VLA_ACTIONS = [
-    "maintain_speed", "decelerate", "steer_left", "steer_right", "emergency_stop"
-]
-
-def _fake_vla_inference(selected: str) -> dict:
-    """Simulate a VLA softmax distribution over the action space.
-
-    In production this is replaced by the real inference output.
-    The selected action receives the majority probability mass.
-    Remaining mass is distributed randomly across alternatives.
-    """
-    conf = round(random.uniform(0.70, 0.95), 4)
-    dist = {selected: conf}
-    rem = round(1.0 - conf, 4)
-    others = [a for a in _VLA_ACTIONS if a != selected]
-    for a in others[:-1]:
-        val = round(random.uniform(0, rem), 4)
-        dist[a] = val
-        rem = round(rem - val, 4)
-    dist[others[-1]] = max(0.0, round(rem, 4))  # clamp float drift
-    return dist
-
-# --- CONFIGURATION ---
-FPS = 10
-# LATENT_DIM imported from axm_embodied_core.protocol
-PRE_WINDOW_FRAMES = int(FPS * 2.0)  # 2 Seconds History
-POST_WINDOW_FRAMES = int(FPS * 2.0) # 2 Seconds Future + Trigger
-
-# CONSTANTS
-
-class ResidualRecorder:
-    def __init__(self, file_handle):
-        self.f = file_handle
-        self.buffer = deque(maxlen=PRE_WINDOW_FRAMES)
-        self.recording_frames_left = 0
-
-    def push(self, frame_id, data):
-        """
-        Ingest frame.
-        If RECORDING: Write direct.
-        If BUFFERING: Add to ring.
-        """
-        # Deterministic Header
-        header = struct.pack(REC_HEADER_FMT, MAGIC_RESID_REC, VERSION, frame_id, len(data))
-        blob = header + data
-
-        if self.recording_frames_left > 0:
-            self.f.write(blob)
-            self.recording_frames_left -= 1
-            if self.recording_frames_left == 0:
-                self.f.flush()  # Durability: Commit the event
-                os.fdatasync(self.f.fileno()) if hasattr(os, 'fdatasync') else os.fsync(self.f.fileno())
-            return "WRITTEN"
-        else:
-            self.buffer.append(blob)
-            return "BUFFERED"
-
-    def trigger(self):
-        """
-        Transitions from Buffering to Recording.
-        1. Flushes the Pre-Window (History).
-        2. Sets counter for Post-Window (Future).
-        """
-        if self.recording_frames_left > 0:
-            return # Already triggered
-
-        # Flush History
-        while self.buffer:
-            self.f.write(self.buffer.popleft())
-
-        self.f.flush()  # Durability: Commit history
-        os.fdatasync(self.f.fileno()) if hasattr(os, 'fdatasync') else os.fsync(self.f.fileno())
-
-        # Set Future Window (Includes current frame if called before push)
-        self.recording_frames_left = POST_WINDOW_FRAMES
-
-def generate_session(out_dir, crash=False):
-    sess_id = str(uuid.uuid4())
-    path = Path(out_dir) / f"capsule-{sess_id[:8]}"
-    path.mkdir(parents=True, exist_ok=True)
-
-    f_lat = open(path / "cam_latents.bin", "wb", buffering=0)
-    f_res = open(path / "cam_residuals.bin", "wb")
-    f_log = open(path / "events.jsonl", "wb")
-
-    # File-Level Magic for Latents (Safety)
-    f_lat.write(MAGIC_LATENT_FILE)
-
-    recorder = ResidualRecorder(f_res)
-
-    print(f"Generating: {sess_id} (Crash={crash})")
-
-    # Deterministic-ish metadata for the demo.
-    # This exists to support compiler-side enrichment and tests that expect a "surface" field.
-    surface_choices = ["asphalt", "concrete", "gravel", "wet_asphalt", "ice"]
-
-    for frame_id in range(100):
-        # 1. Trigger Check (Before Push ensures Trigger Frame is in Post-Window)
-        evt = None
-        if crash and frame_id == 50:
-            evt = {
-                "evt": "wheel_slip",
-                "lvl": "WARN",
-                # Keep this stable across runs for reproducible test vectors.
-                # If you want true randomness, seed and choose per-session.
-                "surface": surface_choices[0],
-            }
-            recorder.trigger()
-
-        # 2. Data Gen
-        latents = os.urandom(LATENT_DIM)
-        residuals = os.urandom(50 * 1024)
-
-        # 3. Write Latent (Strict Offset)
-        lat_offset = f_lat.tell() # Capture BEFORE write
-
-        # Build Record
-        lat_header = struct.pack(REC_HEADER_FMT, MAGIC_LATENT_REC, VERSION, frame_id, len(latents))
-        f_lat.write(lat_header + latents)
-
-        os.fdatasync(f_lat.fileno()) if hasattr(os, 'fdatasync') else os.fsync(f_lat.fileno())
-        # 4. Push Residual
-        recorder.push(frame_id, residuals)
-
-        # 5. Log (Pattern 2: No Residual Pointers)
-        # Mens Rea: determine selected action for this frame
-        if evt and evt.get("evt") == "wheel_slip":
-            _selected = "emergency_stop"
-        elif evt and evt.get("evt") == "recovery_action":
-            _selected = evt.get("action", "decelerate")
-        else:
-            _selected = "maintain_speed"
-
-        log_entry = {
-            "frame_id": frame_id,
-            "robot_id": "sim-final",
-            "selected_action": _selected,
-            "action_distribution": _fake_vla_inference(_selected),
-            "stream_refs": {
-                "latents": {
-                    "file": "cam_latents.bin",
-                    "offset": lat_offset,
-                    "length": LATENT_REC_LEN
-                }
-            }
-        }
-        if evt:
-            log_entry.update(evt)
-        f_log.write(json.dumps(log_entry).encode() + b"\n")
-
-    f_lat.close(); f_res.close(); f_log.close()
-
-    (path/"meta.json").write_text(json.dumps({
-        "session_id": sess_id,
-        "robot_id": "sim-final",
-        "started_at": datetime.utcnow().isoformat() + "Z"
-    }))
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description="AXM Flash Freeze simulator")
     parser.add_argument("--out", default="capsules_final",
                         help="Output directory for capsules (default: capsules_final)")
     parser.add_argument("--crash", action="store_true",
                         help="Simulate a crash event (wheel_slip + emergency_stop)")
     parser.add_argument("--both", action="store_true",
-                        help="Run both a safe and a crash session (default behavior)")
+                        help="Run both a safe and a crash session")
+    parser.add_argument("--frames", type=int, default=100)
+    parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 
-    if args.both or (not args.crash and not args.both):
-        # Default: one safe + one crash session
-        generate_session(args.out, crash=False)
-        generate_session(args.out, crash=True)
+    if args.both:
+        generate_session(args.out, crash=False, frames=args.frames, seed=args.seed)
+        generate_session(args.out, crash=True, frames=args.frames, seed=args.seed)
     else:
-        generate_session(args.out, crash=args.crash)
+        generate_session(args.out, crash=args.crash, frames=args.frames, seed=args.seed)

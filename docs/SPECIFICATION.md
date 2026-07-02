@@ -3,9 +3,20 @@
 # AXM Embodied Genesis Specification
 
 **Version:** 1.0.0
-**Status:** FROZEN
+**Status:** HISTORICAL — superseded for shard format by the axm-genesis v1 kernel
 **Scope:** Embodied Autonomous Systems
 **Audience:** Robotics manufacturers, safety boards, auditors, regulators, systems engineers
+
+> **Historical note (v2.0.0 migration).** This document describes the
+> spoke-era shard format (Parquet tables, `ed25519` / `axm-blake3-mldsa44`
+> suites). As of axm-embodied 2.0.0 the binding format is the axm-genesis
+> v1 kernel specification (`spec/v1/SPECIFICATION.md`: canonical JSONL
+> tables, single `axm-hybrid1` suite) and the frozen stream profile
+> `spec/profiles/embodied@1.md` in the kernel repository. The binary
+> stream layout (AXLF/AXLR/AXRR) and the non-selective-recording doctrine
+> described here carried over unchanged into that profile. Sections on
+> conceptual architecture (Actus Reus / Mens Rea, tiers, Law Gate) remain
+> current.
 
 ------
 
