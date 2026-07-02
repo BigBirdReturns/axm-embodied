@@ -126,10 +126,64 @@ def fly(bounds_shard: Path, out: Path, governance: Path, inject_fault: bool,
         click.echo(f"  incident shard: {incident.shard_path}")
         click.echo(f"  shard id:       {incident.shard_id}")
         click.echo(f"  cites envelope: {incident.envelope_shard_id}")
+        click.echo(f"  attestation:    {incident.attestation_path} (queued; "
+                   f"anchor with `axm-runtime attest-flush`)")
     else:
         click.echo("  (no --key given: capsule sealed, shard not compiled)")
     click.echo(f"BREACH at frame {incident.breach_frame}: incident evidence sealed")
     raise SystemExit(3)
+
+
+@main.command("attest")
+@click.argument("shard", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--queue", "queue_dir", required=True, type=click.Path(path_type=Path),
+              help="Attestation queue directory.")
+@click.option("--note", default="", help="Free-text note stored in the record.")
+def attest(shard: Path, queue_dir: Path, note: str) -> None:
+    """Queue a shard for out-of-band timestamp anchoring (offline, ~2 KB).
+
+    Pins the manifest bytes (which commit to every byte of the shard) and
+    pre-encodes the RFC 3161 query. Anchor later with attest-flush.
+    """
+    from axm_embodied.attest import queue_attestation
+    entry = queue_attestation(shard, queue_dir, note=note)
+    click.echo(f"QUEUED: {entry.shard_id}")
+    click.echo(f"  entry:  {entry.path}")
+    click.echo(f"  sha256: {entry.manifest_sha256}")
+
+
+@main.command("attest-flush")
+@click.argument("queue_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--tsa", "tsa_url", default=None,
+              help="RFC 3161 TSA URL (default: freetsa.org, as used for the "
+                   "kernel's gold-shard attestation).")
+def attest_flush(queue_dir: Path, tsa_url: str | None) -> None:
+    """Anchor every pending attestation at a time-stamping authority.
+
+    Best-effort: entries that fail stay queued for the next flush. Verify
+    an anchored entry with:
+
+    \b
+      openssl ts -verify -queryfile <entry>/manifest.tsq \\
+        -in <entry>/manifest.tsr -CAfile <tsa-ca>.pem
+    """
+    from axm_embodied.attest import DEFAULT_TSA_URL, flush_queue, list_queue
+    results = flush_queue(queue_dir, tsa_url=tsa_url or DEFAULT_TSA_URL)
+    if not results:
+        anchored = sum(1 for e in list_queue(queue_dir) if e.anchored)
+        click.echo(f"Nothing pending ({anchored} already anchored).")
+        return
+    failed = 0
+    for r in results:
+        if r["status"] == "ANCHORED":
+            click.echo(f"ANCHORED: {r['shard_id']} @ {r['tsa']}")
+        else:
+            failed += 1
+            click.echo(f"PENDING:  {r['shard_id']} — {r.get('error', 'unknown error')}")
+    if failed:
+        click.echo(f"{failed} entr{'y' if failed == 1 else 'ies'} still pending; "
+                   f"re-run attest-flush when connectivity returns.")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axm-embodied"
-version = "2.0.0"
+version = "2.1.0"
 description = "Physical liability spoke of the AXM ecosystem: Flash Freeze flight recorder + Shadow Runtime envelope enforcement"
 readme = "README.md"
 license = {text = "Apache-2.0"}

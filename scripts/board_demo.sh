@@ -89,6 +89,12 @@ fi
 echo "PASS: verifier rejected corrupted incident evidence."
 
 echo
+echo "== Step 9 (optional, needs network): anchor the incident's timestamp =="
+set +e
+axm-runtime attest-flush "$DEMO/flight_fault/attestations"
+set -e
+
+echo
 echo "ALL STEPS PASSED — the loop is closed:"
 echo "  training capsules -> signed envelope -> armed flight -> ESTOP"
 echo "  -> Flash Freeze -> incident shard citing the envelope it broke."

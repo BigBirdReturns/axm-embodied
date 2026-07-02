@@ -78,6 +78,7 @@ class Incident:
     shard_path: Optional[Path] = None
     shard_id: Optional[str] = None
     envelope_shard_id: Optional[str] = None
+    attestation_path: Optional[Path] = None
 
 
 class ShadowRuntime:
@@ -214,9 +215,16 @@ class ShadowRuntime:
         shard_out: Optional[Path] = None,
         secret_key: Optional[bytes] = None,
         timestamp: Optional[str] = None,
+        attest_queue: Optional[Path] = None,
     ) -> Optional[Incident]:
         """Close the capsule; if a breach occurred and key material is
         provided, compile the incident shard citing the envelope.
+
+        When ``attest_queue`` is given (default when a shard is compiled:
+        ``<shard_out>/../attestations``), the robot notarizes its own
+        crash: the incident manifest's digests and a pre-encoded RFC 3161
+        timestamp query are queued for out-of-band anchoring the moment
+        connectivity returns. Queueing is offline and costs ~2 KB.
 
         Returns None for a clean flight (the capsule stays on disk as an
         ordinary training candidate), an :class:`Incident` otherwise.
@@ -227,7 +235,9 @@ class ShadowRuntime:
 
         shard_path = None
         shard_id = None
+        attestation_path = None
         if shard_out is not None and secret_key is not None:
+            from axm_embodied.attest import queue_attestation
             from axm_embodied.compile import compile_capsule
 
             shard_id = compile_capsule(
@@ -238,6 +248,14 @@ class ShadowRuntime:
                 envelope_shard_id=self.envelope.shard_id,
             )
             shard_path = Path(shard_out)
+            if attest_queue is None:
+                attest_queue = shard_path.parent / "attestations"
+            entry = queue_attestation(
+                shard_path, attest_queue,
+                note=f"envelope breach at frame {self.breach_frame} under "
+                     f"{self.envelope.shard_id}",
+            )
+            attestation_path = entry.path
 
         return Incident(
             capsule_path=capsule_path,
@@ -245,4 +263,5 @@ class ShadowRuntime:
             shard_path=shard_path,
             shard_id=shard_id,
             envelope_shard_id=self.envelope.shard_id,
+            attestation_path=attestation_path,
         )

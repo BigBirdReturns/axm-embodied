@@ -108,6 +108,12 @@ Fail-closed doctrine, mechanically enforced:
 - **Breach ⇒ ESTOP + Flash Freeze.** Motors die on the breach frame, the
   residual pre-window hits disk, recording continues gap-free, and the sealed
   incident shard cites the envelope shard id via `ext/references@1`.
+- **The robot notarizes its own crash.** A signature proves *who*, never
+  *when*. Sealing an incident queues an attestation entry (manifest digests +
+  a pre-encoded RFC 3161 timestamp query — pure offline, ~2 KB);
+  `axm-runtime attest-flush` anchors it at a time-stamping authority when
+  connectivity returns, so the record provably predates any later key leak,
+  algorithm break, or lawsuit.
 
 ## Shard layout (spec/v1)
 
@@ -178,7 +184,13 @@ axm-runtime fly bounds_shard/ flight/ --governance governance/ \
 # 6. Anyone can verify the incident — no vendor code, no runtime access:
 axm-verify shard flight/incident-shard --trusted-key keys/robot_unit7.pub
 
-# 7. Compile any capsule post-hoc (the original flight-recorder path):
+# 7. Anchor the proof-of-when. Sealing a breach already queued an RFC 3161
+#    timestamp query (offline, ~2 KB); flush it when connectivity returns:
+axm-runtime attest-flush flight/attestations
+#    Decades later: openssl ts -verify -queryfile <entry>/manifest.tsq \
+#                     -in <entry>/manifest.tsr -CAfile <tsa-ca>.pem
+
+# 8. Compile any capsule post-hoc (the original flight-recorder path):
 axm-compile flight/capsule-*/ shard_out/ --key keys/robot_unit7.key
 ```
 

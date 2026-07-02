@@ -820,6 +820,7 @@ footer {
   <span class="nav-brand">AXM<span>-embodied</span></span>
   <a href="#manifesto" class="active">Manifesto</a>
   <a href="#loop">The Loop</a>
+  <a href="#demo">Live Demo</a>
   <a href="#shard">Shard Format</a>
   <a href="#binary">Binary Format</a>
   <a href="#profile">Profile embodied@1</a>
@@ -937,10 +938,241 @@ footer {
   </div>
 </section>
 
-<!-- §03 SHARD FORMAT -->
-<section id="shard">
+<!-- §03 LIVE DEMO -->
+<section id="demo">
   <div class="sec-hd">
     <span class="sec-num">§03</span>
+    <h2>One Incident, Two Stories — Only One Survives Verification</h2>
+  </div>
+  <p>This is a real mission from this repo's simulator, run through the real Shadow Runtime: 100 frames, wheel slip injected at frame 50. Every number below — shard ids, bounds, latent norms, the timestamp — came out of the actual toolchain, and the incident shard verifies with <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">axm-verify</code> today. Toggle between what the robot's narrative log claims and what the sealed disk proves.</p>
+
+  <style>
+    .demo-panel { background: var(--bg-1); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 18px 18px 10px; margin-top: 18px; }
+    .demo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 6px; }
+    .demo-toggle { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 5px; overflow: hidden; }
+    .demo-toggle button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; padding: 9px 16px; background: transparent; color: var(--white-dim); border: 0; cursor: pointer; }
+    .demo-toggle button.on { background: var(--orange-glow); color: var(--orange-hi); box-shadow: inset 0 0 0 1px var(--orange-border); }
+    .demo-cap { font-family: var(--font-mono); font-size: 11.5px; color: var(--white-dim); line-height: 1.5; }
+    .demo-cap strong { color: var(--white); font-weight: 600; }
+    .demo-chart-wrap { position: relative; margin-top: 10px; }
+    .demo-chart-wrap svg { width: 100%; height: auto; display: block; }
+    .demo-tip { position: absolute; pointer-events: none; display: none; background: var(--bg-3); border: 1px solid var(--rule-strong); border-radius: 5px; padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--white); white-space: nowrap; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
+    .demo-tip .tk { color: var(--white-faint); }
+    .demo-tip .estop { color: #ff6a4a; font-weight: 700; }
+    .demo-tip .ok { color: var(--green-hi); }
+    .demo-axis text { font-family: var(--font-mono); font-size: 10px; fill: var(--white-faint); }
+    .demo-grid line { stroke: var(--rule); stroke-width: 1; }
+    .demo-readings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+    @media (max-width: 768px) { .demo-readings { grid-template-columns: 1fr; } }
+    .demo-read { background: var(--bg-1); border: 1px solid var(--rule-strong); border-left: 3px solid var(--orange-dim); border-radius: 5px; padding: 16px 18px; }
+    .demo-read.plaintiff { border-left-color: var(--red); }
+    .demo-read h4 { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--white-dim); margin: 0 0 10px; }
+    .demo-read p { font-size: 14px; line-height: 1.65; color: var(--white); margin: 0 0 8px; }
+    .demo-read p:last-child { margin-bottom: 0; }
+    .demo-read .q { color: var(--white-dim); font-style: italic; }
+    .demo-chain { margin-top: 14px; background: var(--bg-2); border: 1px solid var(--rule-strong); border-radius: 5px; padding: 14px 16px; font-family: var(--font-mono); font-size: 11.5px; line-height: 2; color: var(--white-dim); overflow-x: auto; }
+    .demo-chain b { color: var(--orange); font-weight: 400; }
+    .demo-chain i { color: var(--green-hi); font-style: normal; }
+    .demo-table { margin-top: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--white-dim); }
+    .demo-table summary { cursor: pointer; color: var(--white-faint); letter-spacing: 0.08em; }
+    .demo-table table { border-collapse: collapse; margin-top: 8px; }
+    .demo-table td, .demo-table th { border: 1px solid var(--rule-strong); padding: 4px 10px; text-align: right; }
+    .demo-table th { color: var(--white-faint); font-weight: 400; }
+  </style>
+
+  <div class="demo-panel">
+    <div class="demo-head">
+      <div class="demo-toggle" role="tablist" aria-label="Evidence view">
+        <button id="demo-btn-narr" class="on" role="tab" aria-selected="true">THE NARRATIVE</button>
+        <button id="demo-btn-disk" role="tab" aria-selected="false">THE DISK</button>
+      </div>
+      <div class="demo-cap" id="demo-cap"></div>
+    </div>
+    <div class="demo-chart-wrap" id="demo-wrap">
+      <svg id="demo-svg" viewBox="0 0 960 290" role="img" aria-label="Timeline of 100 mission frames; toggle between VLA confidence (narrative) and latent L-infinity versus the signed bound (disk)"></svg>
+      <div class="demo-tip" id="demo-tip"></div>
+    </div>
+    <details class="demo-table">
+      <summary>FRAME TABLE — BREACH WINDOW (44–56)</summary>
+      <table id="demo-tbl"><thead><tr><th>frame</th><th>event</th><th>VLA action</th><th>conf</th><th>latent L∞</th><th>bound</th><th>verdict</th></tr></thead><tbody></tbody></table>
+    </details>
+  </div>
+
+  <div class="demo-readings">
+    <div class="demo-read">
+      <h4>WHAT THE DEFENSE READS FROM THE SAME SHARD</h4>
+      <p class="q">"The operator complied with signed Tier-0 law. The envelope was compiled from three cryptographically identified training runs and enrolled through governance. The runtime detected the excursion on the frame it occurred and killed actuation in that same frame. Recording never stopped."</p>
+      <p>Due diligence is not asserted — it is the verifier's exit code.</p>
+    </div>
+    <div class="demo-read plaintiff">
+      <h4>WHAT THE PLAINTIFF READS FROM THE SAME SHARD</h4>
+      <p class="q">"At the moment physics exceeded the certified envelope by 18×, the vision-language model was selecting <b style="color:var(--orange);font-weight:400">maintain_speed</b> at 77% confidence. The machine did not know it was failing. Here is the frame, the norm, the bound, and the model's own distribution."</p>
+      <p>Mens Rea, sealed one line after the Actus Reus.</p>
+    </div>
+  </div>
+
+  <div class="demo-chain" id="demo-chain"></div>
+
+  <script>
+  (function () {
+    "use strict";
+    var D = {"actions":["decelerate","maintain_speed","steer_left","steer_right"],"meta":{"breach_frame":50,"bounds":{"decelerate":0.879797,"maintain_speed":0.879165,"steer_left":0.879479,"steer_right":0.879853},"envelope_shard_id":"sh1_7eacba68d3dba20f1ce5bae0790f826f0daa97936f18a005a5efeafcbb81e9a0","incident_shard_id":"sh1_3be2de85af5c9d94f529459fd57b17a818effe8d5fbf5095f5f80f5aa0557220","anchored_at":"2026-07-02 22:56:49 GMT (freetsa.org)"},"frames":[[0.92,0.7898,1,""],[0.92,0.7813,1,""],[0.84,0.784,1,""],[0.94,0.7393,1,""],[0.82,0.7997,1,""],[0.8,0.7953,1,""],[0.78,0.7941,1,""],[0.86,0.7944,1,""],[0.84,0.7997,1,""],[0.86,0.7907,1,""],[0.91,0.7761,0,""],[0.82,0.799,0,""],[0.7,0.7954,0,""],[0.72,0.7853,0,""],[0.78,0.7965,0,""],[0.74,0.7789,0,""],[0.84,0.7737,0,""],[0.76,0.785,0,""],[0.94,0.799,0,""],[0.91,0.7824,0,""],[0.92,0.7836,2,""],[0.74,0.7665,2,""],[0.91,0.7919,2,""],[0.75,0.7914,2,""],[0.89,0.7996,2,""],[0.78,0.789,2,""],[0.75,0.783,2,""],[0.83,0.7752,2,""],[0.71,0.795,2,""],[0.87,0.7952,2,""],[0.75,0.786,3,""],[0.75,0.7953,3,""],[0.86,0.7942,3,""],[0.78,0.7779,3,""],[0.94,0.7964,3,""],[0.75,0.7944,3,""],[0.88,0.7981,3,""],[0.84,0.7979,3,""],[0.9,0.7943,3,""],[0.88,0.7882,3,""],[0.8,0.7872,1,""],[0.76,0.7829,1,""],[0.91,0.7948,1,""],[0.82,0.785,1,""],[0.91,0.7695,1,""],[0.83,0.7922,1,""],[0.81,0.7956,1,""],[0.94,0.7961,1,""],[0.86,0.7921,1,""],[0.82,0.785,1,""],[0.77,15.8172,1,"wheel_slip"],[0.84,0.7798,0,""],[0.81,0.7968,0,""],[0.93,0.7982,0,""],[0.8,0.7945,0,""],[0.73,0.7577,0,""],[0.82,0.7785,0,""],[0.73,0.7843,0,""],[0.86,0.7881,0,""],[0.94,0.7994,0,""],[0.73,0.7903,2,""],[0.74,0.7834,2,""],[0.7,0.7911,2,""],[0.92,0.7995,2,""],[0.82,0.7925,2,""],[0.79,0.7756,2,""],[0.79,0.79,2,""],[0.73,0.7972,2,""],[0.71,0.772,2,""],[0.94,0.7875,2,""],[0.71,0.7654,3,""],[0.88,0.788,3,""],[0.9,0.7959,3,""],[0.82,0.7956,3,""],[0.94,0.7507,3,""],[0.7,0.7932,3,""],[0.77,0.7563,3,""],[0.88,0.7904,3,""],[0.91,0.7451,3,""],[0.79,0.7814,3,""],[0.74,0.7907,1,""],[0.73,0.7796,1,""],[0.74,0.7909,1,""],[0.94,0.7942,1,""],[0.85,0.7901,1,""],[0.87,0.7948,1,""],[0.84,0.7864,1,""],[0.89,0.7505,1,""],[0.72,0.7936,1,""],[0.81,0.7727,1,""],[0.75,0.7943,0,""],[0.78,0.788,0,""],[0.78,0.7787,0,""],[0.94,0.7943,0,""],[0.85,0.7972,0,""],[0.84,0.7616,0,""],[0.84,0.7844,0,""],[0.73,0.7812,0,""],[0.75,0.7973,0,""],[0.92,0.7935,0,""]]};
+    var ACTIONS = D.actions, F = D.frames, META = D.meta;
+    var BREACH = META.breach_frame;
+    var svg = document.getElementById("demo-svg");
+    var tip = document.getElementById("demo-tip");
+    var wrap = document.getElementById("demo-wrap");
+    var cap = document.getElementById("demo-cap");
+    var NS = "http://www.w3.org/2000/svg";
+
+    var W = 960, H = 290, L = 58, R = 12, T = 20, B = 34;
+    var PW = W - L - R, PH = H - T - B;
+    var N = F.length;
+    var xAt = function (i) { return L + (i + 0.5) * (PW / N); };
+
+    function el(tag, attrs, parent) {
+      var e = document.createElementNS(NS, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      (parent || svg).appendChild(e);
+      return e;
+    }
+    function txt(x, y, s, anchor, cls, fill) {
+      var e = el("text", { x: x, y: y, "text-anchor": anchor || "start" });
+      e.textContent = s;
+      if (fill) e.setAttribute("fill", fill);
+      e.setAttribute("font-family", "Space Mono, monospace");
+      e.setAttribute("font-size", "10");
+      if (!fill) e.setAttribute("fill", "#686860");
+      return e;
+    }
+
+    // Disk mode: log10 scale.
+    var LOGMIN = Math.log10(0.1), LOGMAX = Math.log10(32);
+    var yLog = function (v) { return T + (1 - (Math.log10(Math.max(v, 0.1)) - LOGMIN) / (LOGMAX - LOGMIN)) * PH; };
+    var yLin = function (v) { return T + (1 - v) * PH; };
+
+    var mode = "narr";
+
+    function bound(i) { return META.bounds[ACTIONS[F[i][2]]]; }
+    function conf(i) { return F[i][0]; }
+    function linf(i) { return F[i][1]; }
+    function act(i) { return i >= BREACH ? "emergency_stop" : ACTIONS[F[i][2]]; }
+    function vlaAct(i) { return ACTIONS[F[i][2]]; }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+      // x axis frame ticks
+      [0, 25, 50, 75, 99].forEach(function (f) {
+        txt(xAt(f), H - 12, "f" + f, "middle");
+      });
+
+      if (mode === "narr") {
+        cap.innerHTML = "events.jsonl, as the VLA experienced it — <strong>selected-action confidence per frame</strong>. Frame 50 looks like every other frame. Nothing here knows anything is wrong.";
+        // gridlines + y ticks (linear 0..1)
+        [0, 0.25, 0.5, 0.75, 1.0].forEach(function (v) {
+          el("line", { x1: L, x2: W - R, y1: yLin(v), y2: yLin(v), stroke: "#1f1f1c" });
+          txt(L - 8, yLin(v) + 3, v.toFixed(2), "end");
+        });
+        txt(8, 12, "VLA confidence", "start");
+        var bw = Math.max(2, PW / N - 2);   // 2px surface gap between bars
+        for (var i = 0; i < N; i++) {
+          el("rect", {
+            x: xAt(i) - bw / 2, y: yLin(conf(i)),
+            width: bw, height: T + PH - yLin(conf(i)),
+            fill: "#e8620a", opacity: 0.9, rx: 1
+          });
+        }
+      } else {
+        cap.innerHTML = "cam_latents.bin, sealed and Merkle-covered — <strong>latent L∞ per frame vs the signed bound</strong> (log scale). The physics breach the envelope by 18× on the exact frame the narrative calls nominal.";
+        [0.1, 1, 10].forEach(function (v) {
+          el("line", { x1: L, x2: W - R, y1: yLog(v), y2: yLog(v), stroke: "#1f1f1c" });
+          txt(L - 8, yLog(v) + 3, String(v), "end");
+        });
+        txt(8, 12, "latent L∞ (log)", "start");
+
+        // ESTOP region shading (motors dead, recording continues)
+        el("rect", { x: xAt(BREACH), y: T, width: W - R - xAt(BREACH), height: PH, fill: "#cc2200", opacity: 0.05 });
+
+        // Signed bound — threshold, muted dashed
+        var b = META.bounds.maintain_speed;
+        el("line", { x1: L, x2: W - R, y1: yLog(b), y2: yLog(b), stroke: "#8a8278", "stroke-dasharray": "5 4", "stroke-width": 1.5 });
+        txt(W - R, yLog(b) - 6, "signed bound L∞ ≤ " + b.toFixed(3), "end", null, "#8a8278");
+
+        // The trace
+        var d = "";
+        for (var j = 0; j < N; j++) d += (j ? "L" : "M") + xAt(j).toFixed(1) + " " + yLog(linf(j)).toFixed(1) + " ";
+        el("path", { d: d, fill: "none", stroke: "#e8620a", "stroke-width": 2, "stroke-linejoin": "round" });
+
+        // Breach marker: red + label + vertical dashed (never color alone)
+        el("line", { x1: xAt(BREACH), x2: xAt(BREACH), y1: T, y2: T + PH, stroke: "#cc2200", "stroke-dasharray": "3 3" });
+        el("circle", { cx: xAt(BREACH), cy: yLog(linf(BREACH)), r: 5, fill: "#cc2200", stroke: "#111110", "stroke-width": 2 });
+        txt(xAt(BREACH) + 8, yLog(linf(BREACH)) + 4,
+            "ESTOP · L∞ " + linf(BREACH).toFixed(2), "start", null, "#ff6a4a");
+        txt(xAt(BREACH) + 8, T + PH - 8, "motors dead · recording continues →", "start", null, "#8a8278");
+      }
+
+      // hover hit targets + crosshair
+      var cross = el("line", { y1: T, y2: T + PH, stroke: "#e8e0d0", opacity: 0, "stroke-width": 1 });
+      for (var k = 0; k < N; k++) (function (i) {
+        var hit = el("rect", { x: L + i * (PW / N), y: 0, width: PW / N, height: H, fill: "transparent" });
+        hit.addEventListener("mousemove", function (ev) { showTip(i, ev); cross.setAttribute("x1", xAt(i)); cross.setAttribute("x2", xAt(i)); cross.setAttribute("opacity", 0.25); });
+        hit.addEventListener("mouseleave", function () { tip.style.display = "none"; cross.setAttribute("opacity", 0); });
+      })(k);
+    }
+
+    function showTip(i, ev) {
+      var isB = i === BREACH, post = i > BREACH;
+      var v = i >= BREACH ? "ESTOP" : "PERMIT";
+      tip.innerHTML =
+        '<span class="tk">FRAME</span> ' + i + (F[i][3] ? ' · <span class="estop">' + F[i][3] + "</span>" : "") + "<br>" +
+        '<span class="tk">VLA</span> ' + vlaAct(i) + " @ " + (conf(i) * 100).toFixed(0) + "%<br>" +
+        '<span class="tk">L∞</span> ' + linf(i).toFixed(4) + ' <span class="tk">vs bound</span> ' + bound(i).toFixed(4) + "<br>" +
+        '<span class="tk">VERDICT</span> <span class="' + (v === "ESTOP" ? "estop" : "ok") + '">' + v + (post ? " (latched)" : "") + "</span>";
+      tip.style.display = "block";
+      var r = wrap.getBoundingClientRect();
+      var x = ev.clientX - r.left, y = ev.clientY - r.top;
+      tip.style.left = Math.min(x + 14, r.width - tip.offsetWidth - 8) + "px";
+      tip.style.top = Math.max(y - tip.offsetHeight - 12, 4) + "px";
+    }
+
+    // table view (breach window)
+    var tb = document.querySelector("#demo-tbl tbody");
+    for (var t2 = 44; t2 <= 56; t2++) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + t2 + "</td><td>" + (F[t2][3] || "—") + "</td><td>" + vlaAct(t2) + "</td><td>" +
+        conf(t2).toFixed(2) + "</td><td>" + linf(t2).toFixed(4) + "</td><td>" + bound(t2).toFixed(4) + "</td><td>" +
+        (t2 >= BREACH ? "ESTOP" : "PERMIT") + "</td>";
+      tb.appendChild(tr);
+    }
+
+    // chain of custody strip — real ids from this run
+    document.getElementById("demo-chain").innerHTML =
+      "CHAIN OF CUSTODY (all values real, regenerable from this repo)<br>" +
+      "3 training capsules (SHA-256 in the envelope's source.txt)<br>" +
+      " → envelope <b>" + META.envelope_shard_id + "</b><br>" +
+      " → incident <b>" + META.incident_shard_id + "</b> cites it via ext/references@1<br>" +
+      " → RFC 3161 anchor over the incident manifest: <i>" + META.anchored_at + "</i> · openssl ts -verify: <i>OK</i>";
+
+    var bn = document.getElementById("demo-btn-narr"), bd = document.getElementById("demo-btn-disk");
+    function setMode(m) {
+      mode = m;
+      bn.classList.toggle("on", m === "narr"); bd.classList.toggle("on", m === "disk");
+      bn.setAttribute("aria-selected", m === "narr"); bd.setAttribute("aria-selected", m === "disk");
+      tip.style.display = "none";
+      render();
+    }
+    bn.addEventListener("click", function () { setMode("narr"); });
+    bd.addEventListener("click", function () { setMode("disk"); });
+    render();
+  })();
+  </script>
+</section>
+
+<!-- §04 SHARD FORMAT -->
+<section id="shard">
+  <div class="sec-hd">
+    <span class="sec-num">§04</span>
     <h2>Shard Format</h2>
   </div>
   <p>The embodied shard is structurally identical to every other AXM v1 shard. Same manifest.json. Same canonical JSONL core tables. Same Merkle tree. Same <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">axm-hybrid1</code> signature (Ed25519 + ML-DSA-44 — both must verify). The embodied-specific additions are the binary streams in <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">content/</code> and the stream index in <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">ext/</code>.</p>
@@ -988,10 +1220,10 @@ footer {
   </div>
 </section>
 
-<!-- §04 BINARY FORMAT -->
+<!-- §05 BINARY FORMAT -->
 <section id="binary">
   <div class="sec-hd">
-    <span class="sec-num">§04</span>
+    <span class="sec-num">§05</span>
     <h2>AXLF / AXLR / AXRR Binary Format</h2>
   </div>
   <p>cam_latents.bin is a simple binary container: a 4-byte AXLF file magic, then a sequence of AXLR records in frame_id ascending order. No index. No random access. Scanned linearly by the verifier. cam_residuals.bin uses the same 13-byte header with AXRR magic and variable payloads, no file header. The layout is frozen in the kernel's profile document <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">spec/profiles/embodied&#64;1.md</code>.</p>
@@ -1082,10 +1314,10 @@ incident = runtime.<span class="fn">seal</span>(shard_out=<span class="st">"inci
   </div>
 </section>
 
-<!-- §05 PROFILE embodied@1 -->
+<!-- §06 PROFILE embodied@1 -->
 <section id="profile">
   <div class="sec-hd">
-    <span class="sec-num">§05</span>
+    <span class="sec-num">§06</span>
     <h2>Profile embodied&#64;1 — Non-Selective Recording</h2>
   </div>
   <p>What began as this spoke's private REQ 5 is now a frozen kernel profile. A shard declares <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">"embodied&#64;1"</code> in its manifest profiles array — covered by the signature — and every conforming verifier must run the hot-stream continuity check and report it in profiles_checked. Unchecked ≠ passed. Document shards without cam_latents.bin pass vacuously; the profile fires only when the file is present.</p>
@@ -1154,10 +1386,10 @@ expected_fid = <span class="nu">0</span>
   </div>
 </section>
 
-<!-- §06 LAW GATE -->
+<!-- §07 LAW GATE -->
 <section id="gate">
   <div class="sec-hd">
-    <span class="sec-num">§06</span>
+    <span class="sec-num">§07</span>
     <h2>Law Gate — Governance-Aware Arming</h2>
   </div>
   <p>The gate answers one question: is this robot allowed to move under this envelope? Trust is decided by the robot's own governance directory, never by the shard. The shard's publisher.pub only <em>names</em> a publisher; verifying a shard against its own embedded key would merely prove the shard agrees with itself.</p>
@@ -1188,10 +1420,10 @@ expected_fid = <span class="nu">0</span>
   </div>
 </section>
 
-<!-- §07 VERIFICATION -->
+<!-- §08 VERIFICATION -->
 <section id="verify">
   <div class="sec-hd">
-    <span class="sec-num">§07</span>
+    <span class="sec-num">§08</span>
     <h2>Verification Pipeline</h2>
   </div>
   <p>axm-verify (from the axm-genesis kernel) runs its frozen stage sequence; the embodied&#64;1 profile check runs whenever the manifest declares it. A failure at any stage returns exit 1; a malformed shard returns exit 2. The machine-readable JSON result always lists profiles_checked and profiles_unchecked — unchecked is never passed.</p>
@@ -1267,10 +1499,10 @@ expected_fid = <span class="nu">0</span>
   </table>
 </section>
 
-<!-- §08 QUICK START -->
+<!-- §09 QUICK START -->
 <section id="start">
   <div class="sec-hd">
-    <span class="sec-num">§08</span>
+    <span class="sec-num">§09</span>
     <h2>Quick Start — Close the Loop</h2>
   </div>
 
