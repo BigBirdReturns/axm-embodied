@@ -186,5 +186,35 @@ def attest_flush(queue_dir: Path, tsa_url: str | None) -> None:
         raise SystemExit(1)
 
 
+@main.command("attest-publish")
+@click.argument("entry", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument("out", type=click.Path(path_type=Path))
+@click.option("--key", "key_path", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Publisher secret key for the attestation shard. Falls "
+                   "back to AXM_SIGNING_KEY_HEX.")
+@click.option("--timestamp", default=None, metavar="RFC3339Z",
+              help="Override metadata.created_at (reproducible builds).")
+def attest_publish(entry: Path, out: Path, key_path: Path | None,
+                   timestamp: str | None) -> None:
+    """Compile an anchored attestation entry into a shard (RFC 0005).
+
+    The proof-of-when becomes an ordinary signed v1 shard: the raw RFC
+    3161 query/response in content/, anchor metadata in
+    ext/attestations@1.jsonl, and a references@1 citation of the anchored
+    shard. Evidence that travels the same rails as the record it covers.
+    """
+    from axm_embodied.attest import build_attestation_shard
+    secret_key = load_secret_key(key_path)
+    try:
+        shard_id = build_attestation_shard(entry, out, secret_key,
+                                           timestamp=timestamp)
+    except (ValueError, FileNotFoundError, RuntimeError) as e:
+        click.echo(f"FATAL: {e}")
+        raise SystemExit(1)
+    click.echo(f"PASS: attestation shard written to {out}")
+    click.echo(f"  shard id: {shard_id}")
+
+
 if __name__ == "__main__":
     main()
