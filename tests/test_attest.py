@@ -94,3 +94,82 @@ def test_runtime_seal_queues_attestation(bounds_shard, governance, tmp_path, rob
     assert record["shard_id"] == incident.shard_id
     assert "envelope breach at frame 20" in record["note"]
     assert rt.envelope.shard_id in record["note"]
+
+
+def _fake_tsr(gen_time: bytes = b"20260702225649Z") -> bytes:
+    """A byte blob shaped enough like a TimeStampResp for genTime extraction:
+    some DER noise, then GeneralizedTime(15) genTime, then a cert-era
+    UTCTime that must NOT be picked up."""
+    return (b"\x30\x82\x01\x00" + b"\x06\x0b" + b"x" * 11 +
+            b"\x18\x0f" + gen_time +
+            b"\x17\x0d" + b"260702225649Z")
+
+
+def test_gentime_extraction():
+    from axm_embodied.attest import extract_rfc3161_gentime
+    assert extract_rfc3161_gentime(_fake_tsr()) == "2026-07-02T22:56:49Z"
+    assert extract_rfc3161_gentime(b"no gentime here") is None
+    # A 0x18 0x0f that isn't followed by digits+Z must be skipped, not parsed.
+    junk = b"\x18\x0fnot-a-timestamp" + _fake_tsr()
+    assert extract_rfc3161_gentime(junk) == "2026-07-02T22:56:49Z"
+
+
+def test_publish_attestation_shard(tmp_path, robot_keys, school_keys):
+    """RFC 0005 end to end: anchored entry -> attestation shard that
+    verifies and cites the incident it anchors."""
+    from axm_embodied.attest import build_attestation_shard
+    from axm_verify.logic import verify_shard
+
+    pub, key = robot_keys
+    cap = record_mission(tmp_path, fault_at=25)
+    shard = tmp_path / "incident"
+    incident_id = compile_capsule(cap, shard, key)
+
+    queue = tmp_path / "queue"
+    entry = queue_attestation(shard, queue, note="incident")
+    # Simulate the TSA anchor (network-free).
+    (entry.path / "manifest.tsr").write_bytes(_fake_tsr())
+
+    out = tmp_path / "attestation-shard"
+    att_id = build_attestation_shard(entry.path, out, school_keys[1],
+                                     timestamp="2026-07-02T23:00:00Z")
+    assert att_id.startswith("sh1_") and att_id != incident_id
+
+    anchor_pub = tmp_path / "anchor.pub"
+    anchor_pub.write_bytes(school_keys[0])
+    result = verify_shard(out, trusted_key_path=anchor_pub)
+    assert result["status"] == "PASS", result["errors"]
+
+    manifest = json.loads((out / "manifest.json").read_bytes())
+    assert set(manifest["extensions"]) == {"attestations@1", "references@1"}
+
+    rows = [json.loads(line) for line in
+            (out / "ext" / "attestations@1.jsonl").read_text().splitlines()]
+    assert rows == [{
+        "anchored_at": "2026-07-02T22:56:49Z",
+        "authority": rows[0]["authority"],
+        "digest_sha256": entry.manifest_sha256,
+        "kind": "rfc3161",
+        "proof_path": "content/manifest.tsr",
+        "target_shard_id": incident_id,
+    }]
+    refs = [json.loads(line) for line in
+            (out / "ext" / "references@1.jsonl").read_text().splitlines()]
+    assert any(r["dst_shard_id"] == incident_id and r["relation_type"] == "cites"
+               for r in refs)
+
+    # The embedded manifest copy is byte-identical to the anchored shard's.
+    assert ((out / "content" / "target-manifest.json").read_bytes()
+            == (shard / "manifest.json").read_bytes())
+
+
+def test_publish_refuses_unanchored_entry(tmp_path, robot_keys, school_keys):
+    from axm_embodied.attest import build_attestation_shard
+
+    cap = record_mission(tmp_path, fault_at=25)
+    shard = tmp_path / "incident"
+    compile_capsule(cap, shard, robot_keys[1])
+    entry = queue_attestation(shard, tmp_path / "queue")
+
+    with pytest.raises(FileNotFoundError, match="not anchored"):
+        build_attestation_shard(entry.path, tmp_path / "out", school_keys[1])

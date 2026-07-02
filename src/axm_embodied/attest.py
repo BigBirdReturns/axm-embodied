@@ -189,6 +189,147 @@ def flush_queue(queue_dir: Path | str, tsa_url: str = DEFAULT_TSA_URL,
     return results
 
 
+def extract_rfc3161_gentime(tsr_bytes: bytes) -> Optional[str]:
+    """Pull the TSA-asserted genTime out of an RFC 3161 response.
+
+    In a TimeStampResp, the TSTInfo (which carries genTime as a DER
+    GeneralizedTime, tag 0x18, ``YYYYMMDDHHMMSSZ``) sits inside
+    encapContentInfo, which precedes the certificates in SignedData — so
+    the first well-formed GeneralizedTime in the byte stream is genTime.
+    Returns RFC 3339 UTC, or None if no plausible genTime is found. The
+    raw response stays authoritative either way.
+    """
+    i = 0
+    while True:
+        i = tsr_bytes.find(b"\x18\x0f", i)
+        if i == -1:
+            return None
+        v = tsr_bytes[i + 2:i + 17]
+        if len(v) == 15 and v[:14].isdigit() and v[14:15] == b"Z":
+            s = v.decode("ascii")
+            return (f"{s[0:4]}-{s[4:6]}-{s[6:8]}T"
+                    f"{s[8:10]}:{s[10:12]}:{s[12:14]}Z")
+        i += 2
+
+
+def build_attestation_shard(entry_dir: Path | str, out_dir: Path | str,
+                            secret_key: bytes,
+                            publisher_id: str = "@axm_embodied",
+                            publisher_name: str = "AXM Embodied",
+                            timestamp: Optional[str] = None) -> str:
+    """Compile an anchored queue entry into an attestation shard (RFC 0005).
+
+    The proof that the target existed at a point in time becomes an
+    ordinary, signed, citable v1 shard: the raw RFC 3161 query/response
+    and the target-manifest copy in ``content/``, machine-readable anchor
+    metadata in ``ext/attestations@1.jsonl``, and a ``references@1`` row
+    citing the target by ``sh1_`` id. Returns the attestation shard's own
+    derived id.
+    """
+    import tempfile
+
+    from axm_build.compiler_generic import CompilerConfig, compile_generic_shard
+
+    entry_dir = Path(entry_dir)
+    out_dir = Path(out_dir)
+    if not verify_entry_matches_shard(entry_dir):
+        raise ValueError(f"attestation entry is internally inconsistent: {entry_dir}")
+    tsr_path = entry_dir / "manifest.tsr"
+    if not tsr_path.exists():
+        raise FileNotFoundError(
+            f"entry is not anchored yet (no manifest.tsr): {entry_dir} — "
+            f"run `axm-runtime attest-flush` first"
+        )
+
+    record = json.loads((entry_dir / "record.json").read_text())
+    target_id = record["shard_id"]
+    digest = record["manifest_sha256"]
+    anchor = next((a for a in record["anchors"] if a["kind"] == "rfc3161"), {})
+    authority = anchor.get("tsa", DEFAULT_TSA_URL)
+    anchored_at = (extract_rfc3161_gentime(tsr_path.read_bytes())
+                   or anchor.get("anchored_at_local_clock", ""))
+
+    source_text = "\n".join([
+        "ATTESTATION RECORD: PROOF OF EXISTENCE",
+        "======================================",
+        f"target: {target_id}",
+        f"digest_sha256: {digest}",
+        f"kind: rfc3161 authority: {authority} gen_time: {anchored_at}",
+        "The raw proof (content/manifest.tsr) is authoritative; verify with:",
+        "openssl ts -verify -queryfile manifest.tsq -in manifest.tsr -CAfile <tsa-ca>",
+    ]) + "\n"
+
+    candidates = []
+    for pred, obj, ev in [
+        ("target_shard_id", target_id, f"target: {target_id}"),
+        ("digest_sha256", digest, f"digest_sha256: {digest}"),
+        ("anchor_kind", "rfc3161",
+         f"kind: rfc3161 authority: {authority} gen_time: {anchored_at}"),
+        ("anchor_authority", authority,
+         f"kind: rfc3161 authority: {authority} gen_time: {anchored_at}"),
+        ("anchored_at", anchored_at,
+         f"kind: rfc3161 authority: {authority} gen_time: {anchored_at}"),
+    ]:
+        cand = {
+            "subject": f"anchor/{target_id}",
+            "predicate": pred,
+            "object": obj,
+            "object_type": "literal:string",
+            "tier": 1,
+            "evidence": ev,
+        }
+        if pred == "target_shard_id":
+            cand["references"] = [{
+                "dst_shard_id": target_id,
+                "relation_type": "cites",
+                "dst_object_type": "shard",
+                "dst_object_id": "",
+                "confidence": "1.0",
+                "note": "shard whose existence this attestation anchors in time",
+            }]
+        candidates.append(cand)
+
+    ext_rows = [{
+        "target_shard_id": target_id,
+        "kind": "rfc3161",
+        "authority": authority,
+        "digest_sha256": digest,
+        "anchored_at": anchored_at,
+        "proof_path": "content/manifest.tsr",
+    }]
+
+    with tempfile.TemporaryDirectory(prefix="axm_attest_") as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "source.txt").write_text(source_text, encoding="utf-8")
+        with (tmp_path / "candidates.jsonl").open("w", encoding="utf-8") as f:
+            for c in candidates:
+                f.write(json.dumps(c, ensure_ascii=False) + "\n")
+
+        cfg = CompilerConfig(
+            source_path=tmp_path / "source.txt",
+            candidates_path=tmp_path / "candidates.jsonl",
+            out_dir=out_dir,
+            private_key=secret_key,
+            publisher_id=publisher_id,
+            publisher_name=publisher_name,
+            namespace="embodied/attestation",
+            created_at=timestamp or datetime.now(timezone.utc)
+            .replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            title=f"Attestation of {target_id}",
+            license_spdx="Apache-2.0",
+            extra_content=(
+                ("target-manifest.json", entry_dir / "manifest.json"),
+                ("manifest.tsq", entry_dir / "manifest.tsq"),
+                ("manifest.tsr", tsr_path),
+            ),
+            extra_ext={"attestations@1": ext_rows},
+        )
+        if not compile_generic_shard(cfg):
+            raise RuntimeError("kernel rejected the attestation shard")
+
+    return "sh1_" + blake3.blake3((out_dir / "manifest.json").read_bytes()).hexdigest()
+
+
 def verify_entry_matches_shard(entry_dir: Path | str,
                                shard_dir: Optional[Path | str] = None) -> bool:
     """Check internal consistency: tsq digest == manifest copy == record,
