@@ -1,58 +1,80 @@
-"""Query the Law Gate - find mandatory actions for an event type."""
+"""Query a compiled shard: what does the record actually prove?
+
+Shard core tables are canonical JSONL (spec/v1) — plain files, no query
+engine required. This example answers two questions a lawyer or an
+insurer asks first:
+
+  1. What safety envelope was in force? (references@1 citations)
+  2. What did the robot observe, choose, and breach, with evidence?
+
+Usage:
+    python examples/query.py <shard_path> [predicate]
+    python examples/query.py demo/flight_fault/incident-shard breached_envelope
+"""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
-import duckdb
+
+def load_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines() if line]
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
-        print("Usage: python query.py <shard_path> <event_type>")
-        print("Example: python query.py shard/ wheel_slip")
+    if len(sys.argv) < 2:
+        print("Usage: python query.py <shard_path> [predicate]")
+        print("Example: python query.py incident-shard/ breached_envelope")
         sys.exit(1)
 
     shard = Path(sys.argv[1])
-    event_type = sys.argv[2]
+    predicate = sys.argv[2] if len(sys.argv) > 2 else None
 
-    con = duckdb.connect(":memory:")
+    entities = {r["entity_id"]: r["label"] for r in load_jsonl(shard / "graph" / "entities.jsonl")}
+    claims = load_jsonl(shard / "graph" / "claims.jsonl")
+    provenance = load_jsonl(shard / "graph" / "provenance.jsonl")
+    references = load_jsonl(shard / "ext" / "references@1.jsonl")
 
-    # Load shard tables
-    con.execute(f"CREATE VIEW entities AS SELECT * FROM '{shard}/graph/entities.parquet'")
-    con.execute(f"CREATE VIEW claims AS SELECT * FROM '{shard}/graph/claims.parquet'")
-    con.execute(f"CREATE VIEW spans AS SELECT * FROM '{shard}/evidence/spans.parquet'")
-    con.execute(f"CREATE VIEW provenance AS SELECT * FROM '{shard}/graph/provenance.parquet'")
+    # Evidence text per claim, via provenance byte ranges -> spans.
+    span_by_range = {
+        (r["source_hash"], r["byte_start"], r["byte_end"]): r["text"]
+        for r in load_jsonl(shard / "evidence" / "spans.jsonl")
+    }
+    evidence_by_claim: dict[str, str] = {}
+    for p in provenance:
+        key = (p["source_hash"], p["byte_start"], p["byte_end"])
+        if key in span_by_range and p["claim_id"] not in evidence_by_claim:
+            evidence_by_claim[p["claim_id"]] = span_by_range[key]
 
-    # The Law Gate Query: mandatory actions (Tier <= 1) for this event
-    sql = f"""
-    SELECT 
-        t2.label AS action,
-        c.tier,
-        s.text AS evidence
-    FROM claims c
-    JOIN entities t1 ON c.subject = t1.entity_id
-    JOIN entities t2 ON c.object = t2.entity_id
-    LEFT JOIN provenance p ON p.claim_id = c.claim_id
-    LEFT JOIN spans s ON s.span_id = p.span_id
-    WHERE t1.label = '{event_type}' 
-      AND c.predicate = 'resolved_by'
-      AND c.tier <= 1
-    """
+    if references:
+        print("--- Cross-shard citations (references@1) ---")
+        for r in references:
+            print(f"  {r['relation_type']}: {r['dst_shard_id']}")
+            if r.get("note"):
+                print(f"    note: {r['note']}")
+        print()
 
-    print(f"--- Law Gate Query: {event_type} ---")
-    print(f"--- Tier <= 1 (Safety Rules) ---\n")
+    shown = 0
+    print(f"--- Claims{f' (predicate={predicate})' if predicate else ''} ---")
+    for c in claims:
+        if predicate and c["predicate"] != predicate:
+            continue
+        subj = entities.get(c["subject"], c["subject"])
+        obj = entities.get(c["object"], c["object"])
+        print(f"  [{c['tier']}] {subj} --{c['predicate']}--> {obj}")
+        ev = evidence_by_claim.get(c["claim_id"])
+        if ev:
+            print(f"      evidence: {ev[:100]}{'…' if len(ev) > 100 else ''}")
+        shown += 1
+        if shown >= 25 and not predicate:
+            print(f"  … {len(claims) - shown} more (pass a predicate to filter)")
+            break
 
-    df = con.execute(sql).fetchdf()
-    if df.empty:
-        print("No mandatory actions found.")
-        print("Robot must enter SAFE STATE.")
-    else:
-        for _, row in df.iterrows():
-            print(f"ACTION: {row['action']}")
-            print(f"  Tier: {row['tier']}")
-            print(f"  Evidence: {row['evidence'][:80]}...")
-            print()
+    if shown == 0:
+        print("  No matching claims.")
 
 
 if __name__ == "__main__":

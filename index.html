@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>axm-embodied — Sensor Stream Recorder</title>
+<title>axm-embodied — Flight Recorder + Shadow Runtime</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
@@ -819,11 +819,13 @@ footer {
 <nav>
   <span class="nav-brand">AXM<span>-embodied</span></span>
   <a href="#manifesto" class="active">Manifesto</a>
+  <a href="#loop">The Loop</a>
+  <a href="#demo">Live Demo</a>
   <a href="#shard">Shard Format</a>
   <a href="#binary">Binary Format</a>
-  <a href="#req5">REQ 5</a>
+  <a href="#profile">Profile embodied@1</a>
+  <a href="#gate">Law Gate</a>
   <a href="#verify">Verification</a>
-  <a href="#conform">Conformance</a>
   <a href="#start">Quick Start</a>
 </nav>
 
@@ -831,26 +833,26 @@ footer {
 <header class="hero">
   <div class="hero-badge">
     <span class="rec-dot"></span>
-    AXM Ecosystem &nbsp;·&nbsp; Robotics Spoke &nbsp;·&nbsp; v0.1
+    AXM Ecosystem &nbsp;·&nbsp; Robotics Spoke &nbsp;·&nbsp; v2.0.0
   </div>
-  <h1>Embodied.<em>No Gaps.<br>No Exceptions.<br>No Editing.</em></h1>
-  <p class="hero-sub">axm-embodied seals robot sensor streams using the same Genesis shard format as every other AXM spoke. The difference is REQ 5: the binary frame sequence in cam_latents.bin must be gap-free and monotone. Any discontinuity is a cryptographic failure.</p>
+  <h1>Embodied.<em>No Gaps.<br>No Exceptions.<br>No Motion Without Proof.</em></h1>
+  <p class="hero-sub">axm-embodied is two layers on one kernel. Flash Freeze: a forensic flight recorder that seals what a robot perceived, predicted, and chose into a Genesis shard. The Shadow Runtime: enforcement of a signed safety envelope, in the loop — it arms only under governance-trusted, verifier-clean bounds, kills motors the instant physics leaves the envelope, and seals the incident into a shard that cryptographically cites the exact law it broke.</p>
   <div class="hero-meta">
     <div class="meta-cell">
       <div class="meta-key">Format</div>
-      <div class="meta-val">AXLF / AXLR</div>
+      <div class="meta-val">AXLF / AXLR / AXRR</div>
     </div>
     <div class="meta-cell">
-      <div class="meta-key">REQ 5</div>
-      <div class="meta-val warn">Non-Selective</div>
+      <div class="meta-key">Profile</div>
+      <div class="meta-val warn">embodied@1</div>
     </div>
     <div class="meta-cell">
       <div class="meta-key">On Gap</div>
       <div class="meta-val warn">E_BUFFER_DISCONTINUITY</div>
     </div>
     <div class="meta-cell">
-      <div class="meta-key">On Absent</div>
-      <div class="meta-val ok">Silent PASS</div>
+      <div class="meta-key">On Breach</div>
+      <div class="meta-val warn">ESTOP + Flash Freeze</div>
     </div>
   </div>
 </header>
@@ -862,86 +864,369 @@ footer {
     <h2>Why Non-Selective Recording</h2>
   </div>
   <p>An embodied system that selects which sensor frames to record is not trustworthy. The value of a verifiable record depends entirely on its completeness. A record that contains only the moments the system chose to preserve is worthless as evidence.</p>
-  <p>axm-embodied enforces this at the protocol level. The verifier does not ask whether the stream looks complete. It reads every frame_id in sequence and rejects on the first gap.</p>
+  <p>Robots today produce narrative logs. Narrative can lie: a robot can log <em>I stopped</em> while physically accelerating. axm-embodied records the physics (Actus Reus) and the model's choices (Mens Rea) side by side, then seals both — and beyond the recorder, it acts on the sealed law in real time.</p>
 
   <div class="mani-grid">
     <div class="mani-card" data-n="I">
       <div class="mani-rule">Rule I</div>
-      <p><strong>Record everything, then seal.</strong> The hot buffer appends AXLR frames at sensor rate with no cryptographic overhead. When the session ends — or a power-safe threshold fires — Forge compiles the buffer into a sealed shard. Genesis signs it. Nothing is selected.</p>
+      <p><strong>Record everything, then seal.</strong> The hot stream appends one AXLR frame per sensor tick, fsync'd before the frame is acknowledged. The cold stream holds a pre-window ring buffer that hits disk only when a Tier-1 trigger fires. The compiler seals both into a Genesis shard. Nothing is selected.</p>
     </div>
     <div class="mani-card" data-n="II">
       <div class="mani-rule">Rule II</div>
-      <p><strong>A gap is a failure, not an omission.</strong> E_BUFFER_DISCONTINUITY is not a warning. It is a hard verification failure. The same exit code as a bad cryptographic signature. A robot that drops frames is not conformant. The stream format does not accommodate gaps.</p>
+      <p><strong>A gap is a failure, not an omission.</strong> E_BUFFER_DISCONTINUITY is not a warning. It is a hard verification failure — the same exit code as a bad cryptographic signature. A missing frame means deliberate deletion or unrecovered corruption. The profile does not accommodate either.</p>
     </div>
     <div class="mani-card" data-n="III">
       <div class="mani-rule">Rule III</div>
-      <p><strong>Offline verification, no infrastructure.</strong> axm-verify reads cam_latents.bin directly. It checks AXLF magic, then scans every AXLR record. The check is deterministic and stateless. It runs on the same machine that sealed the shard or any other machine with the publisher key.</p>
+      <p><strong>Disk is truth.</strong> StrictJudge scans the binary artifacts directly. It does not trust the event log's offsets: if the log says a record exists at a given offset and the binary disagrees, the binary wins and the compile dies. Verification is offline, deterministic, stateless — no vendor code, no runtime access.</p>
     </div>
     <div class="mani-card" data-n="IV">
       <div class="mani-rule">Rule IV</div>
-      <p><strong>Document shards pass silently.</strong> If cam_latents.bin is absent, REQ 5 does not apply. axm-chat, axm-show, and any document spoke are not affected. REQ 5 is a conditional requirement — it fires only when the file is present.</p>
+      <p><strong>No proof, no motion.</strong> The Shadow Runtime arms only under an envelope that verifies against a key enrolled in the robot's own governance directory. An action class with no signed bound is forbidden motion, not a free pass. Non-finite sensor values can never be "in bounds". Unsigned law never moves a motor.</p>
     </div>
   </div>
 </section>
 
-<!-- §02 SHARD FORMAT -->
-<section id="shard">
+<!-- §02 THE LOOP -->
+<section id="loop">
   <div class="sec-hd">
     <span class="sec-num">§02</span>
-    <h2>Shard Format</h2>
+    <h2>The Loop — Beyond the Flight Recorder</h2>
   </div>
-  <p>The embodied shard is structurally identical to every other AXM shard. Same manifest.json. Same graph/ and evidence/ Parquet tables. Same Merkle tree. Same ML-DSA-44 signature. The only embodied-specific addition is <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">content/cam_latents.bin</code>.</p>
+  <p>The flight recorder proves what happened after the fact. The Shadow Runtime acts on the proof while it still matters. The two share one chain of custody: every incident shard cites, by derived shard id, the exact signed envelope that was in force at the moment the motors died.</p>
 
   <div class="shard-layout">
     <div class="shard-tree">
-      <div><span class="dir">shard_blake3_&lt;merkle_root&gt;/</span></div>
-      <div>&nbsp;&nbsp;<span class="file">manifest.json</span> <span class="cm">← merkle root + suite</span></div>
+      <div><span class="cm">┌─ DRONE SCHOOL ────────────────────────────┐</span></div>
+      <div>&nbsp;&nbsp;<span class="file">safe training capsules</span> <span class="cm">← gap-free recordings</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">│ axm-bounds: p99 L∞ × 1.1 margin</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">▼</span></div>
+      <div>&nbsp;&nbsp;<span class="hot">bounds shard</span> <span class="cm">← signed law (Tier 0)</span></div>
+      <div><span class="cm">└───────────────────────────────────────────┘</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">│ axm-runtime enroll (governance)</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">▼</span></div>
+      <div><span class="cm">┌─ ARMED FLIGHT ────────────────────────────┐</span></div>
+      <div>&nbsp;&nbsp;<span class="file">Law Gate clearance</span> <span class="cm">← verify + trust store</span></div>
+      <div>&nbsp;&nbsp;<span class="file">per-frame guard</span> <span class="cm">← latent L∞ vs signed bound</span></div>
+      <div><span class="cm">└───────────────────────────────────────────┘</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">│ physics leaves the envelope</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">▼</span></div>
+      <div><span class="cm">┌─ BREACH ──────────────────────────────────┐</span></div>
+      <div>&nbsp;&nbsp;<span class="ext">ESTOP</span> <span class="cm">← motors killed on the breach frame</span></div>
+      <div>&nbsp;&nbsp;<span class="ext">Flash Freeze</span> <span class="cm">← residual pre-window → disk</span></div>
+      <div>&nbsp;&nbsp;<span class="hot">incident shard</span> <span class="cm">← cites the envelope id</span></div>
+      <div><span class="cm">└───────────────────────────────────────────┘</span></div>
+    </div>
+
+    <div class="shard-fields">
+      <div class="shard-field">
+        <div class="field-title">The envelope is compiled, not configured</div>
+        <p class="field-body">axm-bounds ingests cryptographically identified safe capsules, takes the 99th-percentile latent L∞ per action class, applies a 1.1× margin, and emits Tier-0 claims in a signed shard. The training manifest names every ingested capsule by SHA-256 — the provenance chain reaches the raw training bytes. Not a hand-tweaked YAML file.</p>
+      </div>
+      <div class="shard-field critical">
+        <div class="field-title">The breach is sinister by design</div>
+        <p class="field-body">In the demo fault, the physics spike while the VLA confidently keeps selecting maintain_speed. The narrative log alone says everything is fine. The Shadow Runtime reads the physics, not the narrative — and the sealed record shows both: the breach frame's latents AND the model's oblivious confidence distribution, one line apart.</p>
+      </div>
+      <div class="shard-field">
+        <div class="field-title">Citation closes the chain of custody</div>
+        <p class="field-body">The incident shard's ext/references@1.jsonl carries <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">relation_type: cites → sh1_&lt;envelope&gt;</code> on the breach claim. Training capsules → signed envelope → armed flight → sealed incident: every link verifiable offline, no link deniable after the fact.</p>
+      </div>
+      <div class="shard-field">
+        <div class="field-title">Exit codes are the API</div>
+        <p class="field-body">axm-runtime fly returns 0 for a clean flight (cold stream stays at zero bytes), 3 for a breach (incident sealed, evidence on disk), 1 when the Law Gate refuses to arm. A tampered envelope never flies; a corrupted incident never verifies.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §03 LIVE DEMO -->
+<section id="demo">
+  <div class="sec-hd">
+    <span class="sec-num">§03</span>
+    <h2>One Incident, Two Stories — Only One Survives Verification</h2>
+  </div>
+  <p>This is a real mission from this repo's simulator, run through the real Shadow Runtime: 100 frames, wheel slip injected at frame 50. Every number below — shard ids, bounds, latent norms, the timestamp — came out of the actual toolchain, and the incident shard verifies with <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">axm-verify</code> today. Toggle between what the robot's narrative log claims and what the sealed disk proves.</p>
+
+  <style>
+    .demo-panel { background: var(--bg-1); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 18px 18px 10px; margin-top: 18px; }
+    .demo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 6px; }
+    .demo-toggle { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 5px; overflow: hidden; }
+    .demo-toggle button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; padding: 9px 16px; background: transparent; color: var(--white-dim); border: 0; cursor: pointer; }
+    .demo-toggle button.on { background: var(--orange-glow); color: var(--orange-hi); box-shadow: inset 0 0 0 1px var(--orange-border); }
+    .demo-cap { font-family: var(--font-mono); font-size: 11.5px; color: var(--white-dim); line-height: 1.5; }
+    .demo-cap strong { color: var(--white); font-weight: 600; }
+    .demo-chart-wrap { position: relative; margin-top: 10px; }
+    .demo-chart-wrap svg { width: 100%; height: auto; display: block; }
+    .demo-tip { position: absolute; pointer-events: none; display: none; background: var(--bg-3); border: 1px solid var(--rule-strong); border-radius: 5px; padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--white); white-space: nowrap; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
+    .demo-tip .tk { color: var(--white-faint); }
+    .demo-tip .estop { color: #ff6a4a; font-weight: 700; }
+    .demo-tip .ok { color: var(--green-hi); }
+    .demo-axis text { font-family: var(--font-mono); font-size: 10px; fill: var(--white-faint); }
+    .demo-grid line { stroke: var(--rule); stroke-width: 1; }
+    .demo-readings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+    @media (max-width: 768px) { .demo-readings { grid-template-columns: 1fr; } }
+    .demo-read { background: var(--bg-1); border: 1px solid var(--rule-strong); border-left: 3px solid var(--orange-dim); border-radius: 5px; padding: 16px 18px; }
+    .demo-read.plaintiff { border-left-color: var(--red); }
+    .demo-read h4 { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--white-dim); margin: 0 0 10px; }
+    .demo-read p { font-size: 14px; line-height: 1.65; color: var(--white); margin: 0 0 8px; }
+    .demo-read p:last-child { margin-bottom: 0; }
+    .demo-read .q { color: var(--white-dim); font-style: italic; }
+    .demo-chain { margin-top: 14px; background: var(--bg-2); border: 1px solid var(--rule-strong); border-radius: 5px; padding: 14px 16px; font-family: var(--font-mono); font-size: 11.5px; line-height: 2; color: var(--white-dim); overflow-x: auto; }
+    .demo-chain b { color: var(--orange); font-weight: 400; }
+    .demo-chain i { color: var(--green-hi); font-style: normal; }
+    .demo-table { margin-top: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--white-dim); }
+    .demo-table summary { cursor: pointer; color: var(--white-faint); letter-spacing: 0.08em; }
+    .demo-table table { border-collapse: collapse; margin-top: 8px; }
+    .demo-table td, .demo-table th { border: 1px solid var(--rule-strong); padding: 4px 10px; text-align: right; }
+    .demo-table th { color: var(--white-faint); font-weight: 400; }
+  </style>
+
+  <div class="demo-panel">
+    <div class="demo-head">
+      <div class="demo-toggle" role="tablist" aria-label="Evidence view">
+        <button id="demo-btn-narr" class="on" role="tab" aria-selected="true">THE NARRATIVE</button>
+        <button id="demo-btn-disk" role="tab" aria-selected="false">THE DISK</button>
+      </div>
+      <div class="demo-cap" id="demo-cap"></div>
+    </div>
+    <div class="demo-chart-wrap" id="demo-wrap">
+      <svg id="demo-svg" viewBox="0 0 960 290" role="img" aria-label="Timeline of 100 mission frames; toggle between VLA confidence (narrative) and latent L-infinity versus the signed bound (disk)"></svg>
+      <div class="demo-tip" id="demo-tip"></div>
+    </div>
+    <details class="demo-table">
+      <summary>FRAME TABLE — BREACH WINDOW (44–56)</summary>
+      <table id="demo-tbl"><thead><tr><th>frame</th><th>event</th><th>VLA action</th><th>conf</th><th>latent L∞</th><th>bound</th><th>verdict</th></tr></thead><tbody></tbody></table>
+    </details>
+  </div>
+
+  <div class="demo-readings">
+    <div class="demo-read">
+      <h4>WHAT THE DEFENSE READS FROM THE SAME SHARD</h4>
+      <p class="q">"The operator complied with signed Tier-0 law. The envelope was compiled from three cryptographically identified training runs and enrolled through governance. The runtime detected the excursion on the frame it occurred and killed actuation in that same frame. Recording never stopped."</p>
+      <p>Due diligence is not asserted — it is the verifier's exit code.</p>
+    </div>
+    <div class="demo-read plaintiff">
+      <h4>WHAT THE PLAINTIFF READS FROM THE SAME SHARD</h4>
+      <p class="q">"At the moment physics exceeded the certified envelope by 18×, the vision-language model was selecting <b style="color:var(--orange);font-weight:400">maintain_speed</b> at 77% confidence. The machine did not know it was failing. Here is the frame, the norm, the bound, and the model's own distribution."</p>
+      <p>Mens Rea, sealed one line after the Actus Reus.</p>
+    </div>
+  </div>
+
+  <div class="demo-chain" id="demo-chain"></div>
+
+  <script>
+  (function () {
+    "use strict";
+    var D = {"actions":["decelerate","maintain_speed","steer_left","steer_right"],"meta":{"breach_frame":50,"bounds":{"decelerate":0.879797,"maintain_speed":0.879165,"steer_left":0.879479,"steer_right":0.879853},"envelope_shard_id":"sh1_7eacba68d3dba20f1ce5bae0790f826f0daa97936f18a005a5efeafcbb81e9a0","incident_shard_id":"sh1_3be2de85af5c9d94f529459fd57b17a818effe8d5fbf5095f5f80f5aa0557220","anchored_at":"2026-07-02 22:56:49 GMT (freetsa.org)"},"frames":[[0.92,0.7898,1,""],[0.92,0.7813,1,""],[0.84,0.784,1,""],[0.94,0.7393,1,""],[0.82,0.7997,1,""],[0.8,0.7953,1,""],[0.78,0.7941,1,""],[0.86,0.7944,1,""],[0.84,0.7997,1,""],[0.86,0.7907,1,""],[0.91,0.7761,0,""],[0.82,0.799,0,""],[0.7,0.7954,0,""],[0.72,0.7853,0,""],[0.78,0.7965,0,""],[0.74,0.7789,0,""],[0.84,0.7737,0,""],[0.76,0.785,0,""],[0.94,0.799,0,""],[0.91,0.7824,0,""],[0.92,0.7836,2,""],[0.74,0.7665,2,""],[0.91,0.7919,2,""],[0.75,0.7914,2,""],[0.89,0.7996,2,""],[0.78,0.789,2,""],[0.75,0.783,2,""],[0.83,0.7752,2,""],[0.71,0.795,2,""],[0.87,0.7952,2,""],[0.75,0.786,3,""],[0.75,0.7953,3,""],[0.86,0.7942,3,""],[0.78,0.7779,3,""],[0.94,0.7964,3,""],[0.75,0.7944,3,""],[0.88,0.7981,3,""],[0.84,0.7979,3,""],[0.9,0.7943,3,""],[0.88,0.7882,3,""],[0.8,0.7872,1,""],[0.76,0.7829,1,""],[0.91,0.7948,1,""],[0.82,0.785,1,""],[0.91,0.7695,1,""],[0.83,0.7922,1,""],[0.81,0.7956,1,""],[0.94,0.7961,1,""],[0.86,0.7921,1,""],[0.82,0.785,1,""],[0.77,15.8172,1,"wheel_slip"],[0.84,0.7798,0,""],[0.81,0.7968,0,""],[0.93,0.7982,0,""],[0.8,0.7945,0,""],[0.73,0.7577,0,""],[0.82,0.7785,0,""],[0.73,0.7843,0,""],[0.86,0.7881,0,""],[0.94,0.7994,0,""],[0.73,0.7903,2,""],[0.74,0.7834,2,""],[0.7,0.7911,2,""],[0.92,0.7995,2,""],[0.82,0.7925,2,""],[0.79,0.7756,2,""],[0.79,0.79,2,""],[0.73,0.7972,2,""],[0.71,0.772,2,""],[0.94,0.7875,2,""],[0.71,0.7654,3,""],[0.88,0.788,3,""],[0.9,0.7959,3,""],[0.82,0.7956,3,""],[0.94,0.7507,3,""],[0.7,0.7932,3,""],[0.77,0.7563,3,""],[0.88,0.7904,3,""],[0.91,0.7451,3,""],[0.79,0.7814,3,""],[0.74,0.7907,1,""],[0.73,0.7796,1,""],[0.74,0.7909,1,""],[0.94,0.7942,1,""],[0.85,0.7901,1,""],[0.87,0.7948,1,""],[0.84,0.7864,1,""],[0.89,0.7505,1,""],[0.72,0.7936,1,""],[0.81,0.7727,1,""],[0.75,0.7943,0,""],[0.78,0.788,0,""],[0.78,0.7787,0,""],[0.94,0.7943,0,""],[0.85,0.7972,0,""],[0.84,0.7616,0,""],[0.84,0.7844,0,""],[0.73,0.7812,0,""],[0.75,0.7973,0,""],[0.92,0.7935,0,""]]};
+    var ACTIONS = D.actions, F = D.frames, META = D.meta;
+    var BREACH = META.breach_frame;
+    var svg = document.getElementById("demo-svg");
+    var tip = document.getElementById("demo-tip");
+    var wrap = document.getElementById("demo-wrap");
+    var cap = document.getElementById("demo-cap");
+    var NS = "http://www.w3.org/2000/svg";
+
+    var W = 960, H = 290, L = 58, R = 12, T = 20, B = 34;
+    var PW = W - L - R, PH = H - T - B;
+    var N = F.length;
+    var xAt = function (i) { return L + (i + 0.5) * (PW / N); };
+
+    function el(tag, attrs, parent) {
+      var e = document.createElementNS(NS, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      (parent || svg).appendChild(e);
+      return e;
+    }
+    function txt(x, y, s, anchor, cls, fill) {
+      var e = el("text", { x: x, y: y, "text-anchor": anchor || "start" });
+      e.textContent = s;
+      if (fill) e.setAttribute("fill", fill);
+      e.setAttribute("font-family", "Space Mono, monospace");
+      e.setAttribute("font-size", "10");
+      if (!fill) e.setAttribute("fill", "#686860");
+      return e;
+    }
+
+    // Disk mode: log10 scale.
+    var LOGMIN = Math.log10(0.1), LOGMAX = Math.log10(32);
+    var yLog = function (v) { return T + (1 - (Math.log10(Math.max(v, 0.1)) - LOGMIN) / (LOGMAX - LOGMIN)) * PH; };
+    var yLin = function (v) { return T + (1 - v) * PH; };
+
+    var mode = "narr";
+
+    function bound(i) { return META.bounds[ACTIONS[F[i][2]]]; }
+    function conf(i) { return F[i][0]; }
+    function linf(i) { return F[i][1]; }
+    function act(i) { return i >= BREACH ? "emergency_stop" : ACTIONS[F[i][2]]; }
+    function vlaAct(i) { return ACTIONS[F[i][2]]; }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+      // x axis frame ticks
+      [0, 25, 50, 75, 99].forEach(function (f) {
+        txt(xAt(f), H - 12, "f" + f, "middle");
+      });
+
+      if (mode === "narr") {
+        cap.innerHTML = "events.jsonl, as the VLA experienced it — <strong>selected-action confidence per frame</strong>. Frame 50 looks like every other frame. Nothing here knows anything is wrong.";
+        // gridlines + y ticks (linear 0..1)
+        [0, 0.25, 0.5, 0.75, 1.0].forEach(function (v) {
+          el("line", { x1: L, x2: W - R, y1: yLin(v), y2: yLin(v), stroke: "#1f1f1c" });
+          txt(L - 8, yLin(v) + 3, v.toFixed(2), "end");
+        });
+        txt(8, 12, "VLA confidence", "start");
+        var bw = Math.max(2, PW / N - 2);   // 2px surface gap between bars
+        for (var i = 0; i < N; i++) {
+          el("rect", {
+            x: xAt(i) - bw / 2, y: yLin(conf(i)),
+            width: bw, height: T + PH - yLin(conf(i)),
+            fill: "#e8620a", opacity: 0.9, rx: 1
+          });
+        }
+      } else {
+        cap.innerHTML = "cam_latents.bin, sealed and Merkle-covered — <strong>latent L∞ per frame vs the signed bound</strong> (log scale). The physics breach the envelope by 18× on the exact frame the narrative calls nominal.";
+        [0.1, 1, 10].forEach(function (v) {
+          el("line", { x1: L, x2: W - R, y1: yLog(v), y2: yLog(v), stroke: "#1f1f1c" });
+          txt(L - 8, yLog(v) + 3, String(v), "end");
+        });
+        txt(8, 12, "latent L∞ (log)", "start");
+
+        // ESTOP region shading (motors dead, recording continues)
+        el("rect", { x: xAt(BREACH), y: T, width: W - R - xAt(BREACH), height: PH, fill: "#cc2200", opacity: 0.05 });
+
+        // Signed bound — threshold, muted dashed
+        var b = META.bounds.maintain_speed;
+        el("line", { x1: L, x2: W - R, y1: yLog(b), y2: yLog(b), stroke: "#8a8278", "stroke-dasharray": "5 4", "stroke-width": 1.5 });
+        txt(W - R, yLog(b) - 6, "signed bound L∞ ≤ " + b.toFixed(3), "end", null, "#8a8278");
+
+        // The trace
+        var d = "";
+        for (var j = 0; j < N; j++) d += (j ? "L" : "M") + xAt(j).toFixed(1) + " " + yLog(linf(j)).toFixed(1) + " ";
+        el("path", { d: d, fill: "none", stroke: "#e8620a", "stroke-width": 2, "stroke-linejoin": "round" });
+
+        // Breach marker: red + label + vertical dashed (never color alone)
+        el("line", { x1: xAt(BREACH), x2: xAt(BREACH), y1: T, y2: T + PH, stroke: "#cc2200", "stroke-dasharray": "3 3" });
+        el("circle", { cx: xAt(BREACH), cy: yLog(linf(BREACH)), r: 5, fill: "#cc2200", stroke: "#111110", "stroke-width": 2 });
+        txt(xAt(BREACH) + 8, yLog(linf(BREACH)) + 4,
+            "ESTOP · L∞ " + linf(BREACH).toFixed(2), "start", null, "#ff6a4a");
+        txt(xAt(BREACH) + 8, T + PH - 8, "motors dead · recording continues →", "start", null, "#8a8278");
+      }
+
+      // hover hit targets + crosshair
+      var cross = el("line", { y1: T, y2: T + PH, stroke: "#e8e0d0", opacity: 0, "stroke-width": 1 });
+      for (var k = 0; k < N; k++) (function (i) {
+        var hit = el("rect", { x: L + i * (PW / N), y: 0, width: PW / N, height: H, fill: "transparent" });
+        hit.addEventListener("mousemove", function (ev) { showTip(i, ev); cross.setAttribute("x1", xAt(i)); cross.setAttribute("x2", xAt(i)); cross.setAttribute("opacity", 0.25); });
+        hit.addEventListener("mouseleave", function () { tip.style.display = "none"; cross.setAttribute("opacity", 0); });
+      })(k);
+    }
+
+    function showTip(i, ev) {
+      var isB = i === BREACH, post = i > BREACH;
+      var v = i >= BREACH ? "ESTOP" : "PERMIT";
+      tip.innerHTML =
+        '<span class="tk">FRAME</span> ' + i + (F[i][3] ? ' · <span class="estop">' + F[i][3] + "</span>" : "") + "<br>" +
+        '<span class="tk">VLA</span> ' + vlaAct(i) + " @ " + (conf(i) * 100).toFixed(0) + "%<br>" +
+        '<span class="tk">L∞</span> ' + linf(i).toFixed(4) + ' <span class="tk">vs bound</span> ' + bound(i).toFixed(4) + "<br>" +
+        '<span class="tk">VERDICT</span> <span class="' + (v === "ESTOP" ? "estop" : "ok") + '">' + v + (post ? " (latched)" : "") + "</span>";
+      tip.style.display = "block";
+      var r = wrap.getBoundingClientRect();
+      var x = ev.clientX - r.left, y = ev.clientY - r.top;
+      tip.style.left = Math.min(x + 14, r.width - tip.offsetWidth - 8) + "px";
+      tip.style.top = Math.max(y - tip.offsetHeight - 12, 4) + "px";
+    }
+
+    // table view (breach window)
+    var tb = document.querySelector("#demo-tbl tbody");
+    for (var t2 = 44; t2 <= 56; t2++) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + t2 + "</td><td>" + (F[t2][3] || "—") + "</td><td>" + vlaAct(t2) + "</td><td>" +
+        conf(t2).toFixed(2) + "</td><td>" + linf(t2).toFixed(4) + "</td><td>" + bound(t2).toFixed(4) + "</td><td>" +
+        (t2 >= BREACH ? "ESTOP" : "PERMIT") + "</td>";
+      tb.appendChild(tr);
+    }
+
+    // chain of custody strip — real ids from this run
+    document.getElementById("demo-chain").innerHTML =
+      "CHAIN OF CUSTODY (all values real, regenerable from this repo)<br>" +
+      "3 training capsules (SHA-256 in the envelope's source.txt)<br>" +
+      " → envelope <b>" + META.envelope_shard_id + "</b><br>" +
+      " → incident <b>" + META.incident_shard_id + "</b> cites it via ext/references@1<br>" +
+      " → RFC 3161 anchor over the incident manifest: <i>" + META.anchored_at + "</i> · openssl ts -verify: <i>OK</i>";
+
+    var bn = document.getElementById("demo-btn-narr"), bd = document.getElementById("demo-btn-disk");
+    function setMode(m) {
+      mode = m;
+      bn.classList.toggle("on", m === "narr"); bd.classList.toggle("on", m === "disk");
+      bn.setAttribute("aria-selected", m === "narr"); bd.setAttribute("aria-selected", m === "disk");
+      tip.style.display = "none";
+      render();
+    }
+    bn.addEventListener("click", function () { setMode("narr"); });
+    bd.addEventListener("click", function () { setMode("disk"); });
+    render();
+  })();
+  </script>
+</section>
+
+<!-- §04 SHARD FORMAT -->
+<section id="shard">
+  <div class="sec-hd">
+    <span class="sec-num">§04</span>
+    <h2>Shard Format</h2>
+  </div>
+  <p>The embodied shard is structurally identical to every other AXM v1 shard. Same manifest.json. Same canonical JSONL core tables. Same Merkle tree. Same <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">axm-hybrid1</code> signature (Ed25519 + ML-DSA-44 — both must verify). The embodied-specific additions are the binary streams in <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">content/</code> and the stream index in <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">ext/</code>.</p>
+
+  <div class="shard-layout">
+    <div class="shard-tree">
+      <div><span class="dir">shard/</span> <span class="cm">← id derived: sh1_ + BLAKE3(manifest)</span></div>
+      <div>&nbsp;&nbsp;<span class="file">manifest.json</span> <span class="cm">← merkle root, suite, profiles</span></div>
       <div>&nbsp;&nbsp;<span class="dir">sig/</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">manifest.sig</span> <span class="cm">← ML-DSA-44</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">publisher.pub</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">manifest.sig</span> <span class="cm">← axm-hybrid1, 2484 B</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">publisher.pub</span> <span class="cm">← 1344 B</span></div>
       <div>&nbsp;&nbsp;<span class="dir">content/</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">session.jsonl</span> <span class="cm">← structured event log</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="hot">cam_latents.bin</span> <span class="cm">← REQ 5 applies</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">source.txt</span> <span class="cm">← events.jsonl, byte-authoritative</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="hot">cam_latents.bin</span> <span class="cm">← hot stream, embodied@1 applies</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="hot">cam_residuals.bin</span> <span class="cm">← cold stream, if Flash Freeze fired</span></div>
       <div>&nbsp;&nbsp;<span class="dir">graph/</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">entities.parquet</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">claims.parquet</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">provenance.parquet</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">entities.jsonl</span> <span class="cm">← canonical JSONL</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">claims.jsonl</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">provenance.jsonl</span></div>
       <div>&nbsp;&nbsp;<span class="dir">evidence/</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">spans.parquet</span></div>
-      <div>&nbsp;&nbsp;<span class="dir">ext/</span> <span class="cm">← optional, Merkle-covered</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">episodes&#64;1.parquet</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">kinematics&#64;1.parquet</span></div>
-      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">telemetry&#64;1.parquet</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">spans.jsonl</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">ext/</span> <span class="cm">← opaque to kernel, Merkle-covered</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">streams&#64;1.jsonl</span> <span class="cm">← StrictJudge byte index</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="ext">references&#64;1.jsonl</span> <span class="cm">← incident → envelope citation</span></div>
     </div>
 
     <div class="shard-fields">
       <div class="shard-field">
         <div class="field-title">manifest.json — same as all spokes</div>
-        <p class="field-body">spec_version, shard_id, metadata, publisher, sources (with SHA-256 of every content file including cam_latents.bin), integrity.merkle_root, suite. The cam_latents.bin SHA-256 is in sources — the Merkle tree covers it like any other content file.</p>
+        <p class="field-body">spec_version, suite, metadata, publisher, license, sources, integrity.merkle_root, statistics, profiles. The sources array is a bijection with content/: every binary stream's SHA-256 is declared, and every content file is a Merkle leaf. There is no shard_id field — identity is derived from the manifest bytes, never stored.</p>
       </div>
       <div class="shard-field">
-        <div class="field-title">session.jsonl — structured event log</div>
-        <p class="field-body">Newline-delimited JSON event records from the session: motor commands, state transitions, error conditions, external events. Byte-addressable via spans.parquet. Claims in graph/ can trace to specific JSON records.</p>
+        <div class="field-title">source.txt — the event log is the source document</div>
+        <p class="field-body">Newline-delimited JSON: one record per frame with selected_action, the full VLA action_distribution (Mens Rea), and advisory stream offsets. Every claim in graph/ cites an exact byte span of this document; the spans are re-checked by the verifier.</p>
       </div>
       <div class="shard-field critical">
-        <div class="field-title">cam_latents.bin — hot stream (REQ 5)</div>
-        <p class="field-body">Binary file. AXLF magic header (8 bytes). Followed by a sequence of AXLR records in frame_id order. Records must be gap-free and monotone. Any missing frame_id triggers <code>E_BUFFER_DISCONTINUITY</code>. The file is Merkle-covered — its SHA-256 is in sources.</p>
+        <div class="field-title">cam_latents.bin — hot stream (profile embodied@1)</div>
+        <p class="field-body">AXLF file magic, then back-to-back AXLR records in frame_id order: gap-free, monotone, no padding, fsync'd at write time. Any missing frame triggers <code>E_BUFFER_DISCONTINUITY</code>. Sealed as a raw-bytes Merkle leaf and listed in sources.</p>
       </div>
       <div class="shard-field">
-        <div class="field-title">ext/kinematics&#64;1.parquet — optional extension</div>
-        <p class="field-body">Structured kinematic data extracted from the session: joint angles, velocities, forces, end-effector positions. Merkle-covered as an extension table. Queryable via axm-core Spectra without an LLM.</p>
+        <div class="field-title">ext/streams&#64;1.jsonl — StrictJudge's testimony</div>
+        <p class="field-body">One row per verified stream record: byte offset, length, status, SHA-256 of the payload. Latents are asserted by strict offset math; residuals are discovered by scanning the cold stream, never trusted from the log. Canonical JSONL sorted by (stream, frame_id, offset).</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- §03 BINARY FORMAT -->
+<!-- §05 BINARY FORMAT -->
 <section id="binary">
   <div class="sec-hd">
-    <span class="sec-num">§03</span>
-    <h2>AXLF / AXLR Binary Format</h2>
+    <span class="sec-num">§05</span>
+    <h2>AXLF / AXLR / AXRR Binary Format</h2>
   </div>
-  <p>cam_latents.bin is a simple binary container. The file begins with an AXLF header block. The remainder of the file is a sequence of AXLR records in frame_id ascending order. No index. No random access. Scanned linearly by axm-verify.</p>
+  <p>cam_latents.bin is a simple binary container: a 4-byte AXLF file magic, then a sequence of AXLR records in frame_id ascending order. No index. No random access. Scanned linearly by the verifier. cam_residuals.bin uses the same 13-byte header with AXRR magic and variable payloads, no file header. The layout is frozen in the kernel's profile document <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">spec/profiles/embodied&#64;1.md</code>.</p>
 
   <div class="binary-layout">
     <div class="byte-map">
@@ -949,27 +1234,19 @@ footer {
         <div class="byte-dot" style="background:#e8620a"></div>
         <div class="byte-dot" style="background:#7a3205"></div>
         <div class="byte-dot" style="background:#3a3830"></div>
-        <span class="byte-map-title">AXLF Header Block</span>
+        <span class="byte-map-title">File Header (once, offset 0)</span>
       </div>
       <div class="byte-map-body">
         <div class="byte-row">
           <span class="byte-offset">0x00–0x03</span>
-          <span class="byte-label"><span>AXLF</span> magic <em>4 bytes</em></span>
+          <span class="byte-label"><span>AXLF</span> magic <em>4 bytes — that's the whole header</em></span>
         </div>
         <div class="byte-row">
-          <span class="byte-offset">0x04</span>
-          <span class="byte-label"><span>version</span> uint8 <em>= 1</em></span>
-        </div>
-        <div class="byte-row">
-          <span class="byte-offset">0x05–0x08</span>
-          <span class="byte-label"><span>frame_id</span> uint32 LE <em>first frame</em></span>
-        </div>
-        <div class="byte-row">
-          <span class="byte-offset">0x09–0x0C</span>
-          <span class="byte-label"><span>length</span> uint32 LE <em>payload bytes</em></span>
+          <span class="byte-offset">0x04–…</span>
+          <span class="byte-label"><span>records</span> <em>record fid starts at 4 + fid × 269</em></span>
         </div>
       </div>
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);padding:10px 16px 4px;">REC_HEADER_FMT = &quot;&lt;4sBII&quot; &nbsp;·&nbsp; REC_HEADER_LEN = 13 &nbsp;·&nbsp; LATENT_DIM = 256</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);padding:10px 16px 4px;">REC_HEADER_FMT = &quot;&lt;4sBII&quot; &nbsp;·&nbsp; REC_HEADER_LEN = 13 &nbsp;·&nbsp; LATENT_DIM = 256 &nbsp;·&nbsp; LATENT_REC_LEN = 269</div>
     </div>
 
     <div class="byte-map">
@@ -982,7 +1259,7 @@ footer {
       <div class="byte-map-body">
         <div class="byte-row">
           <span class="byte-offset">+0x00–0x03</span>
-          <span class="byte-label"><span>AXLR</span> magic <em>4 bytes</em></span>
+          <span class="byte-label"><span>AXLR</span> magic <em>4 bytes (AXRR for residuals)</em></span>
         </div>
         <div class="byte-row">
           <span class="byte-offset">+0x04</span>
@@ -990,15 +1267,15 @@ footer {
         </div>
         <div class="byte-row">
           <span class="byte-offset">+0x05–0x08</span>
-          <span class="byte-label"><span>frame_id</span> uint32 LE <em>monotone ↑</em></span>
+          <span class="byte-label"><span>frame_id</span> uint32 LE <em>0,1,2,… no gaps</em></span>
         </div>
         <div class="byte-row">
           <span class="byte-offset">+0x09–0x0C</span>
-          <span class="byte-label"><span>length</span> uint32 LE <em>payload bytes</em></span>
+          <span class="byte-label"><span>payload_len</span> uint32 LE <em>256 for latents</em></span>
         </div>
         <div class="byte-row">
           <span class="byte-offset">+0x0D–…</span>
-          <span class="byte-label"><span>payload</span> <em>length bytes · latent vector</em></span>
+          <span class="byte-label"><span>payload</span> <em>64 × float32 latent vector</em></span>
         </div>
       </div>
     </div>
@@ -1009,56 +1286,48 @@ footer {
       <div class="cb-dot" style="background:#e8620a"></div>
       <div class="cb-dot" style="background:#7a3205"></div>
       <div class="cb-dot" style="background:#3a3830"></div>
-      <span class="cb-title">axm_embodied/writer.py — frame writer</span>
+      <span class="cb-title">axm_embodied/recorder.py — the recorder in a control loop</span>
     </div>
     <pre>
-<span class="c"># Hot buffer write path — no crypto overhead, nanosecond appends</span>
-<span class="kw">import</span> struct, time
+<span class="kw">from</span> axm_embodied.recorder <span class="kw">import</span> CapsuleRecorder
+<span class="kw">from</span> axm_embodied.gate <span class="kw">import</span> LawGate
+<span class="kw">from</span> axm_embodied.runtime <span class="kw">import</span> ShadowRuntime
 
-AXLF_MAGIC = <span class="st">b"AXLF"</span>
-AXLR_MAGIC = <span class="st">b"AXLR"</span>
+<span class="c"># No proof, no motion: arming requires a governance clearance.</span>
+clearance = <span class="fn">LawGate</span>(<span class="st">"governance/"</span>).<span class="fn">authorize</span>(<span class="st">"bounds_shard/"</span>)
+recorder  = <span class="fn">CapsuleRecorder</span>(<span class="st">"flight/"</span>, robot_id=<span class="st">"unit-7"</span>)
+runtime   = <span class="fn">ShadowRuntime</span>(clearance, recorder)
 
-<span class="kw">class</span> <span class="fn">HotBufferWriter</span>:
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, path: <span class="kw">str</span>, session_ts: <span class="kw">int</span> = <span class="kw">None</span>):
-        self._f = <span class="fn">open</span>(path, <span class="st">"wb"</span>, buffering=<span class="nu">0</span>)   <span class="c"># O_DIRECT writes</span>
-        self._frame_id = <span class="nu">0</span>
-        ts = session_ts <span class="kw">or</span> <span class="fn">int</span>(time.<span class="fn">time</span>() * <span class="nu">1_000_000</span>)
-        <span class="c"># Write AXLF header</span>
-        self._f.<span class="fn">write</span>(AXLF_MAGIC)
-        self._f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;BII"</span>, <span class="nu">1</span>, <span class="nu">0</span>, ts))
+<span class="kw">for</span> frame <span class="kw">in</span> sensor_loop():                    <span class="c"># your perception stack</span>
+    decision = runtime.<span class="fn">guard</span>(
+        frame.latents,                          <span class="c"># 256 bytes, fsync'd</span>
+        frame.selected_action,                  <span class="c"># what the VLA chose</span>
+        frame.action_distribution,              <span class="c"># Mens Rea, every frame</span>
+        residual=frame.residual,                <span class="c"># cold-stream ring buffer</span>
+    )
+    <span class="kw">if not</span> decision.permitted:
+        motors.<span class="fn">kill</span>()                           <span class="c"># ESTOP — recording continues</span>
 
-    <span class="kw">def</span> <span class="fn">append</span>(self, payload: <span class="kw">bytes</span>) -> <span class="kw">int</span>:
-        ts = <span class="fn">int</span>(time.<span class="fn">time</span>() * <span class="nu">1_000_000</span>)
-        self._f.<span class="fn">write</span>(AXLR_MAGIC)
-        self._f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;BII"</span>, <span class="nu">1</span>, self._frame_id, <span class="fn">len</span>(payload)))
-        self._f.<span class="fn">write</span>(payload)
-        fid = self._frame_id
-        self._frame_id += <span class="nu">1</span>
-        <span class="kw">return</span> fid
-
-    <span class="kw">def</span> <span class="fn">close</span>(self):
-        self._f.<span class="fn">flush</span>(); self._f.<span class="fn">close</span>()
-
-<span class="c"># Usage: one append per sensor tick. No batching. No buffering in userspace.</span>
-<span class="c"># On session end, call axm-embodied seal → Forge → Genesis signs.</span>
+<span class="c"># Breach? Seal the incident shard citing the envelope's sh1_ id.</span>
+incident = runtime.<span class="fn">seal</span>(shard_out=<span class="st">"incident/"</span>, secret_key=key)
 </pre>
   </div>
 </section>
 
-<!-- §04 REQ 5 -->
-<section id="req5">
+<!-- §06 PROFILE embodied@1 -->
+<section id="profile">
   <div class="sec-hd">
-    <span class="sec-num">§04</span>
-    <h2>REQ 5 — Non-Selective Recording</h2>
+    <span class="sec-num">§06</span>
+    <h2>Profile embodied&#64;1 — Non-Selective Recording</h2>
   </div>
-  <p>REQ 5 is the only conformance requirement unique to embodied spokes. It is enforced by step 7 of axm-verify. The check is binary: either the frame sequence is gap-free or the shard fails verification.</p>
+  <p>What began as this spoke's private REQ 5 is now a frozen kernel profile. A shard declares <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">"embodied&#64;1"</code> in its manifest profiles array — covered by the signature — and every conforming verifier must run the hot-stream continuity check and report it in profiles_checked. Unchecked ≠ passed. Document shards without cam_latents.bin pass vacuously; the profile fires only when the file is present.</p>
 
   <div class="req5-block">
     <div class="req5-accent"></div>
     <div class="req5-body">
       <div class="req5-label"><span class="rec-dot"></span> E_BUFFER_DISCONTINUITY</div>
       <div class="req5-title">Frame gap, bad magic, or truncation in cam_latents.bin</div>
-      <p>Triggered when: (1) AXLF magic is absent or wrong, (2) any AXLR record has magic mismatch, (3) any frame_id skips — expected N, found M where M ≠ N+1, (4) file truncates mid-record. All four conditions produce the same error code and the same verification outcome: FAIL, exit 1.</p>
+      <p>Triggered when: (1) the AXLF file magic is absent or wrong, (2) any record has magic or version mismatch, (3) any frame_id skips, repeats, or reorders, (4) the file truncates mid-header or mid-payload, (5) the stream cannot be read or exceeds the verifier's resource limit (cannot-verify is a failure, not a pass). All conditions produce the same profile error code and the same outcome: FAIL, exit 1 — identical in weight to a bad signature.</p>
     </div>
   </div>
 
@@ -1067,49 +1336,24 @@ AXLR_MAGIC = <span class="st">b"AXLR"</span>
       <div class="cb-dot" style="background:#e8620a"></div>
       <div class="cb-dot" style="background:#7a3205"></div>
       <div class="cb-dot" style="background:#3a3830"></div>
-      <span class="cb-title">axm_verify/checks/stream.py — REQ 5 implementation</span>
+      <span class="cb-title">axm-genesis · src/axm_verify/profiles/embodied_v1.py — the kernel check</span>
     </div>
     <pre>
-<span class="c"># Step 7 of axm-verify — hot stream continuity check</span>
-<span class="kw">import</span> struct
-<span class="kw">from</span> pathlib <span class="kw">import</span> Path
-<span class="kw">from</span> axm_verify.const <span class="kw">import</span> E_BUFFER_DISCONTINUITY
-
-AXLF_MAGIC = <span class="st">b"AXLF"</span>
-AXLR_MAGIC = <span class="st">b"AXLR"</span>
-AXLF_HDR   = <span class="nu">32</span>   <span class="c"># bytes</span>
-AXLR_HDR   = <span class="nu">24</span>   <span class="c"># bytes (before payload)</span>
-
-<span class="kw">def</span> <span class="fn">check_stream_continuity</span>(shard_dir: Path) -> <span class="kw">list</span>[<span class="kw">str</span>]:
-    cam = shard_dir / <span class="st">"content"</span> / <span class="st">"cam_latents.bin"</span>
-    <span class="kw">if not</span> cam.<span class="fn">exists</span>():
-        <span class="kw">return</span> []   <span class="c"># absent = silent pass (REQ 5 not applicable)</span>
-
-    errors = []
-    <span class="kw">with</span> cam.<span class="fn">open</span>(<span class="st">"rb"</span>) <span class="kw">as</span> f:
-        hdr = f.<span class="fn">read</span>(AXLF_HDR)
-        <span class="kw">if</span> <span class="fn">len</span>(hdr) < AXLF_HDR <span class="kw">or</span> hdr[:<span class="nu">4</span>] != AXLF_MAGIC:
-            <span class="kw">return</span> [E_BUFFER_DISCONTINUITY]   <span class="c"># bad magic = immediate fail</span>
-
-        expected_frame_id = <span class="nu">0</span>
-        <span class="kw">while True</span>:
-            rec_hdr = f.<span class="fn">read</span>(AXLR_HDR)
-            <span class="kw">if not</span> rec_hdr:
-                <span class="kw">break</span>   <span class="c"># EOF</span>
-            <span class="kw">if</span> <span class="fn">len</span>(rec_hdr) < AXLR_HDR <span class="kw">or</span> rec_hdr[:<span class="nu">4</span>] != AXLR_MAGIC:
-                errors.<span class="fn">append</span>(E_BUFFER_DISCONTINUITY); <span class="kw">break</span>
-
-            frame_id, _, payload_len = struct.<span class="fn">unpack_from</span>(<span class="st">"&lt;QQI"</span>, rec_hdr, <span class="nu">4</span>)
-            <span class="kw">if</span> frame_id != expected_frame_id:
-                errors.<span class="fn">append</span>(E_BUFFER_DISCONTINUITY); <span class="kw">break</span>   <span class="c"># gap detected</span>
-
-            f.<span class="fn">seek</span>(payload_len, <span class="nu">1</span>)   <span class="c"># skip payload</span>
-            expected_frame_id += <span class="nu">1</span>
-
-    <span class="kw">return</span> errors
-
-<span class="c"># Test: synthetic gap</span>
-<span class="c"># Write frames 0,1,2 then skip to 4 → E_BUFFER_DISCONTINUITY fires on frame 4</span>
+<span class="c"># spec/profiles/embodied@1.md §6 — the entire normative check set</span>
+expected_fid = <span class="nu">0</span>
+<span class="kw">with</span> latents_path.<span class="fn">open</span>(<span class="st">"rb"</span>) <span class="kw">as</span> f:
+    <span class="kw">if</span> f.<span class="fn">read</span>(<span class="nu">4</span>) != <span class="st">b"AXLF"</span>:
+        <span class="kw">return</span> <span class="fn">_err</span>(errors, <span class="st">"invalid file magic"</span>)
+    <span class="kw">while True</span>:
+        header = f.<span class="fn">read</span>(<span class="nu">13</span>)
+        <span class="kw">if</span> <span class="fn">len</span>(header) == <span class="nu">0</span>: <span class="kw">break</span>       <span class="c"># clean EOF — check passes</span>
+        magic, ver, fid, dlen = struct.<span class="fn">unpack</span>(<span class="st">"&lt;4sBII"</span>, header)
+        <span class="kw">if</span> magic != <span class="st">b"AXLR"</span> <span class="kw">or</span> ver != <span class="nu">1</span>:
+            <span class="kw">return</span> <span class="fn">_err</span>(errors, <span class="st">"bad record magic/version"</span>)
+        <span class="kw">if</span> fid != expected_fid:
+            <span class="kw">return</span> <span class="fn">_err</span>(errors, <span class="st">f"frame gap: expected {expected_fid}"</span>)
+        f.<span class="fn">read</span>(dlen)                        <span class="c"># truncated payload → error</span>
+        expected_fid += <span class="nu">1</span>
 </pre>
   </div>
 
@@ -1118,41 +1362,76 @@ AXLR_HDR   = <span class="nu">24</span>   <span class="c"># bytes (before payloa
       <div class="cb-dot" style="background:#e8620a"></div>
       <div class="cb-dot" style="background:#7a3205"></div>
       <div class="cb-dot" style="background:#3a3830"></div>
-      <span class="cb-title">tests/test_conformance.py — REQ 5 test</span>
+      <span class="cb-title">tests/test_flight_recorder.py — spoliation dies in daylight</span>
     </div>
     <pre>
-<span class="kw">def</span> <span class="fn">test_req5_buffer_gap_detected</span>(tmp_path):
-    <span class="c"># Build a syntactically valid cam_latents.bin with a deliberate gap</span>
-    cam = tmp_path / <span class="st">"cam_latents.bin"</span>
-    <span class="kw">with</span> cam.<span class="fn">open</span>(<span class="st">"wb"</span>) <span class="kw">as</span> f:
-        f.<span class="fn">write</span>(b<span class="st">"AXLF"</span>)
-        f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;IQQI"</span>, <span class="nu">1</span>, <span class="nu">4</span>, <span class="nu">0</span>, <span class="nu">0</span>))
-        <span class="kw">for</span> fid <span class="kw">in</span> [<span class="nu">0</span>, <span class="nu">1</span>, <span class="nu">2</span>, <span class="nu">4</span>]:   <span class="c"># gap: frame 3 missing</span>
-            payload = <span class="st">f"frame_{fid}"</span>.<span class="fn">encode</span>()
-            f.<span class="fn">write</span>(b<span class="st">"AXLR"</span>)
-            f.<span class="fn">write</span>(struct.<span class="fn">pack</span>(<span class="st">"&lt;QQI"</span>, fid, <span class="nu">0</span>, <span class="fn">len</span>(payload)))
-            f.<span class="fn">write</span>(payload)
+<span class="kw">def</span> <span class="fn">test_frame_gap_fails_profile_verification</span>(tmp_path, robot_keys):
+    <span class="c">"""Cutting a frame out of the hot stream is spoliation: the sealed</span>
+<span class="c">    shard can never pass the embodied@1 continuity check."""</span>
+    cap = <span class="fn">record_mission</span>(tmp_path, fault_at=<span class="nu">25</span>)
+    <span class="fn">compile_capsule</span>(cap, out, key)
 
-    errors = <span class="fn">check_stream_continuity</span>(tmp_path.parent)
-    <span class="kw">assert</span> <span class="st">"E_BUFFER_DISCONTINUITY"</span> <span class="kw">in</span> errors   <span class="c"># ← must fire</span>
+    <span class="c"># Excise frame 10's record from the SEALED shard's hot stream</span>
+    raw = <span class="fn">bytearray</span>(sealed.<span class="fn">read_bytes</span>())
+    <span class="kw">del</span> raw[start:start + LATENT_REC_LEN]
+    sealed.<span class="fn">write_bytes</span>(<span class="fn">bytes</span>(raw))
 
-<span class="ok">PASSED</span> · test_req5_buffer_gap_detected
+    result = <span class="fn">verify_shard</span>(out, trusted_key_path=pub)
+    <span class="kw">assert</span> result[<span class="st">"status"</span>] == <span class="st">"FAIL"</span>
+
+<span class="ok">PASSED</span> · test_frame_gap_fails_profile_verification
+<span class="ok">PASSED</span> · test_corrupted_latents_kill_the_compile
+<span class="ok">PASSED</span> · test_safe_run_keeps_cold_stream_empty
 </pre>
   </div>
 </section>
 
-<!-- §05 VERIFICATION -->
+<!-- §07 LAW GATE -->
+<section id="gate">
+  <div class="sec-hd">
+    <span class="sec-num">§07</span>
+    <h2>Law Gate — Governance-Aware Arming</h2>
+  </div>
+  <p>The gate answers one question: is this robot allowed to move under this envelope? Trust is decided by the robot's own governance directory, never by the shard. The shard's publisher.pub only <em>names</em> a publisher; verifying a shard against its own embedded key would merely prove the shard agrees with itself.</p>
+
+  <div class="shard-layout">
+    <div class="shard-tree">
+      <div><span class="dir">governance/</span></div>
+      <div>&nbsp;&nbsp;<span class="file">trust_store.json</span> <span class="cm">← sha256 fingerprints, ships EMPTY</span></div>
+      <div>&nbsp;&nbsp;<span class="file">local_policy.json</span> <span class="cm">← {"max_actuation_tier": 0}</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">trusted_keys/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="hot">drone_school.pub</span> <span class="cm">← enrolled anchor, 1344 B</span></div>
+    </div>
+
+    <div class="shard-fields">
+      <div class="shard-field critical">
+        <div class="field-title">Enrollment is deliberate, twofold, auditable</div>
+        <p class="field-body">A key is an anchor only when the .pub file exists in trusted_keys/ AND its SHA-256 fingerprint is listed in trust_store.json. Dropping a file into the directory is not enrollment. An empty trust store means the robot cannot arm at all — there is no default trusted publisher, exactly as there is no default signing key.</p>
+      </div>
+      <div class="shard-field">
+        <div class="field-title">Tier policy bounds what law may actuate</div>
+        <p class="field-body">Envelope constraints are Tier-0 claims: formal invariants derived from identified training runs. local_policy.json's max_actuation_tier caps the tier the robot may move under; advisory claims can never arm motors on a Tier-0 policy.</p>
+      </div>
+      <div class="shard-field">
+        <div class="field-title">Every refusal is specific</div>
+        <p class="field-body">Unenrolled publisher fingerprint. Merkle mismatch after a one-byte tamper. A widened bound re-signed by the wrong key. Constraint tier above policy. Each produces a distinct GateError before a single frame is guarded — and the runtime without a Clearance object cannot be constructed at all.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §08 VERIFICATION -->
 <section id="verify">
   <div class="sec-hd">
-    <span class="sec-num">§05</span>
+    <span class="sec-num">§08</span>
     <h2>Verification Pipeline</h2>
   </div>
-  <p>axm-verify runs seven steps in sequence. Steps 1–6 are identical to all AXM spokes. Step 7 is the embodied-specific stream continuity check. A failure at any step halts and returns exit 1.</p>
+  <p>axm-verify (from the axm-genesis kernel) runs its frozen stage sequence; the embodied&#64;1 profile check runs whenever the manifest declares it. A failure at any stage returns exit 1; a malformed shard returns exit 2. The machine-readable JSON result always lists profiles_checked and profiles_unchecked — unchecked is never passed.</p>
 
   <table class="verify-table">
     <thead>
       <tr>
-        <th>Step</th>
+        <th>Stage</th>
         <th>Name</th>
         <th>Pass Condition</th>
         <th>Error Code</th>
@@ -1163,170 +1442,126 @@ AXLR_HDR   = <span class="nu">24</span>   <span class="c"># bytes (before payloa
       <tr>
         <td class="step-id">01</td>
         <td class="step-name">Layout</td>
-        <td class="step-pass">manifest.json, sig/, content/, graph/, evidence/ present</td>
+        <td class="step-pass">Closed root item set; no symlinks, no dotfiles anywhere</td>
         <td class="step-err">E_LAYOUT_MISSING<br>E_LAYOUT_DIRTY</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
+        <td><span class="badge badge-all">Kernel</span></td>
       </tr>
       <tr>
         <td class="step-id">02</td>
-        <td class="step-name">Manifest Parse</td>
-        <td class="step-pass">Valid JSON, required fields present, ≤256 KiB</td>
-        <td class="step-err">E_MANIFEST_SYNTAX<br>E_MANIFEST_SCHEMA</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
+        <td class="step-name">Manifest</td>
+        <td class="step-pass">Canonical JSON, closed key set, no shard_id field</td>
+        <td class="step-err">E_MANIFEST_SCHEMA</td>
+        <td><span class="badge badge-all">Kernel</span></td>
       </tr>
       <tr>
         <td class="step-id">03</td>
-        <td class="step-name">Trusted Key + Signature</td>
-        <td class="step-pass">publisher.pub matches --trusted-key; signature verifies</td>
-        <td class="step-err">E_SIG_MISSING<br>E_SIG_INVALID</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
+        <td class="step-name">Hybrid Signature</td>
+        <td class="step-pass">publisher.pub == trusted key; Ed25519 AND ML-DSA-44 both verify</td>
+        <td class="step-err">E_SIG_INVALID</td>
+        <td><span class="badge badge-all">Kernel</span></td>
       </tr>
       <tr>
         <td class="step-id">04</td>
-        <td class="step-name">Merkle Root</td>
-        <td class="step-pass">Computed root == manifest.integrity.merkle_root</td>
-        <td class="step-err">E_MERKLE_MISMATCH</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
+        <td class="step-name">Sources Bijection</td>
+        <td class="step-pass">sources ↔ content/ exactly; every SHA-256 matches (binary streams included)</td>
+        <td class="step-err">E_MANIFEST_SCHEMA<br>E_REF_READ</td>
+        <td><span class="badge badge-all">Kernel</span></td>
       </tr>
       <tr>
         <td class="step-id">05</td>
-        <td class="step-name">Parquet Schema</td>
-        <td class="step-pass">Column names, types, counts match frozen Arrow schemas</td>
-        <td class="step-err">E_SCHEMA_TYPE<br>E_SCHEMA_NULL</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
+        <td class="step-name">Merkle Root</td>
+        <td class="step-pass">Domain-separated BLAKE3 root == manifest.integrity.merkle_root</td>
+        <td class="step-err">E_MERKLE_MISMATCH</td>
+        <td><span class="badge badge-all">Kernel</span></td>
       </tr>
       <tr>
         <td class="step-id">06</td>
-        <td class="step-name">Reference Integrity</td>
-        <td class="step-pass">All claim subjects, span sources, byte ranges valid</td>
+        <td class="step-name">Core Tables</td>
+        <td class="step-pass">Canonical JSONL, exact schemas, bytewise sort, identities recompute</td>
+        <td class="step-err">E_TABLE_ENCODING<br>E_ID_MISMATCH</td>
+        <td><span class="badge badge-all">Kernel</span></td>
+      </tr>
+      <tr>
+        <td class="step-id">07</td>
+        <td class="step-name">References</td>
+        <td class="step-pass">Every claim's evidence span resolves to exact source bytes</td>
         <td class="step-err">E_REF_ORPHAN<br>E_REF_SOURCE</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
+        <td><span class="badge badge-all">Kernel</span></td>
       </tr>
       <tr class="req5-row">
-        <td class="step-id">07</td>
-        <td class="step-name">Stream Continuity</td>
+        <td class="step-id">08</td>
+        <td class="step-name">Profile embodied&#64;1</td>
         <td class="step-pass">cam_latents.bin absent OR AXLF valid AND all frame_ids gap-free</td>
         <td class="step-err">E_BUFFER_DISCONTINUITY</td>
-        <td><span class="badge badge-embodied">Embodied Only</span></td>
+        <td><span class="badge badge-embodied">Embodied</span></td>
       </tr>
     </tbody>
   </table>
 </section>
 
-<!-- §06 CONFORMANCE -->
-<section id="conform">
-  <div class="sec-hd">
-    <span class="sec-num">§06</span>
-    <h2>Conformance Requirements</h2>
-  </div>
-  <p>Spokes must satisfy REQ 1–4 to be conformant with the Genesis spec. Embodied spokes must additionally satisfy REQ 5. Run all 13 conformance tests; the REQ 5 test is <code style="font-family:var(--font-mono);font-size:13px;color:var(--orange)">test_req5_buffer_gap_detected</code>.</p>
-
-  <table class="conf-table">
-    <thead>
-      <tr>
-        <th>REQ</th>
-        <th>Description</th>
-        <th>Error Codes</th>
-        <th>Scope</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="req-id">REQ 1</td>
-        <td>Manifest integrity — byte-exact signature over manifest</td>
-        <td class="req-codes">E_SIG_INVALID<br>E_MERKLE_MISMATCH</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
-      </tr>
-      <tr>
-        <td class="req-id">REQ 2</td>
-        <td>Content identity — all content files covered by Merkle tree</td>
-        <td class="req-codes">E_MERKLE_MISMATCH<br>E_REF_SOURCE</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
-      </tr>
-      <tr>
-        <td class="req-id">REQ 3</td>
-        <td>Lineage events — all references valid, no nulls in required columns</td>
-        <td class="req-codes">E_REF_ORPHAN<br>E_SCHEMA_NULL</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
-      </tr>
-      <tr>
-        <td class="req-id">REQ 4</td>
-        <td>Proof bundle — valid signature from trusted publisher key</td>
-        <td class="req-codes">E_SIG_INVALID<br>E_SIG_MISSING</td>
-        <td><span class="badge badge-all">All Spokes</span></td>
-      </tr>
-      <tr>
-        <td class="req-id">REQ 5</td>
-        <td>Non-selective recording — no gaps in binary hot stream</td>
-        <td class="req-codes">E_BUFFER_DISCONTINUITY</td>
-        <td><span class="badge badge-embodied">Embodied Only</span></td>
-      </tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- §07 QUICK START -->
+<!-- §09 QUICK START -->
 <section id="start">
   <div class="sec-hd">
-    <span class="sec-num">§07</span>
-    <h2>Quick Start</h2>
+    <span class="sec-num">§09</span>
+    <h2>Quick Start — Close the Loop</h2>
   </div>
 
   <div class="qs-grid">
     <div class="qs-card">
-      <div class="qs-phase">Install</div>
+      <div class="qs-phase">Install + Keys</div>
       <pre>
-<span class="c"># Install dependencies in order</span>
-<span class="kw">pip install -e</span> <span class="pa">./axm-genesis</span>    <span class="c"># kernel</span>
-<span class="kw">pip install -e</span> <span class="pa">./axm-core</span>       <span class="c"># runtime</span>
-<span class="kw">pip install -e</span> <span class="pa">./axm-embodied</span>   <span class="c"># this spoke</span>
+<span class="kw">pip install -e</span> <span class="pa">.</span>   <span class="c"># pulls the axm-genesis kernel</span>
+
+<span class="c"># No default keys. Ever.</span>
+<span class="kw">axm-build keygen</span> <span class="pa">keys</span> <span class="kw">--name</span> <span class="pa">drone_school</span>
+<span class="kw">axm-build keygen</span> <span class="pa">keys</span> <span class="kw">--name</span> <span class="pa">robot_unit7</span>
 </pre>
     </div>
 
     <div class="qs-card">
-      <div class="qs-phase">Record + Seal</div>
+      <div class="qs-phase">School + Envelope</div>
       <pre>
-<span class="c"># Start a session (opens cam_latents.bin)</span>
-<span class="kw">axm-embodied record start</span> \
-  <span class="kw">--signing-key</span> <span class="pa">keys/robot.pem</span>
+<span class="c"># Record safe training missions</span>
+<span class="kw">axm-runtime record-training</span> <span class="pa">training/</span> <span class="kw">--runs</span> <span class="pa">3</span>
 
-<span class="c"># Frames append at sensor rate</span>
-<span class="c"># On session end, Forge seals the shard</span>
-<span class="kw">axm-embodied record stop</span>
-<span class="ok">✓ Sealed ~/.axm/shards/session-&lt;id&gt;/</span>
+<span class="c"># Compile the signed safety envelope</span>
+<span class="kw">axm-bounds</span> <span class="pa">training/ bounds_shard/</span> \
+  <span class="kw">--key</span> <span class="pa">keys/drone_school.key</span>
+
+<span class="c"># Enroll the publisher in the robot's governance</span>
+<span class="kw">axm-runtime enroll</span> <span class="pa">keys/drone_school.pub</span> \
+  <span class="kw">--governance</span> <span class="pa">governance/</span>
 </pre>
     </div>
 
     <div class="qs-card">
-      <div class="qs-phase">Verify</div>
+      <div class="qs-phase">Fly</div>
       <pre>
-<span class="c"># Verify a sealed session shard</span>
-<span class="kw">axm-verify shard</span> \
-  <span class="pa">~/.axm/shards/session-abc123/</span> \
-  <span class="kw">--trusted-key</span> <span class="pa">keys/robot.pub</span>
+<span class="c"># Clean mission: exit 0, cold stream stays empty</span>
+<span class="kw">axm-runtime fly</span> <span class="pa">bounds_shard/ flight/</span> \
+  <span class="kw">--governance</span> <span class="pa">governance/</span>
 
-<span class="ok">{"status":"PASS","error_count":0,"errors":[]}</span>
+<span class="c"># Physics excursion: ESTOP + Flash Freeze, exit 3</span>
+<span class="kw">axm-runtime fly</span> <span class="pa">bounds_shard/ flight/</span> \
+  <span class="kw">--governance</span> <span class="pa">governance/</span> <span class="kw">--inject-fault</span> \
+  <span class="kw">--key</span> <span class="pa">keys/robot_unit7.key</span>
 
-<span class="c"># Introduce a gap → should FAIL</span>
-<span class="kw">axm-verify shard</span> <span class="pa">./test-gap-shard/</span> \
-  <span class="kw">--trusted-key</span> <span class="pa">keys/robot.pub</span>
-
-<span class="er">{"status":"FAIL","errors":["E_BUFFER_DISCONTINUITY"]}</span>
+<span class="er">ESTOP at frame 50: latent L∞ 15.85 exceeds bound 0.88</span>
+<span class="ok">incident shard cites envelope sh1_e9f2f7d1…</span>
 </pre>
     </div>
 
     <div class="qs-card">
-      <div class="qs-phase">Conformance Suite</div>
+      <div class="qs-phase">Verify + Demo</div>
       <pre>
-<span class="c"># Run all 13 conformance tests</span>
-<span class="kw">python -m pytest</span> \
-  <span class="pa">tests/test_conformance.py</span> -v
+<span class="c"># Anyone, offline, no vendor code:</span>
+<span class="kw">axm-verify shard</span> <span class="pa">flight/incident-shard</span> \
+  <span class="kw">--trusted-key</span> <span class="pa">keys/robot_unit7.pub</span>
+<span class="ok">{"status":"PASS","profiles_checked":["embodied@1"]}</span>
 
-<span class="ok">test_baseline_gold_shard_passes ....... PASSED</span>
-<span class="ok">test_req5_buffer_gap_detected ......... PASSED</span>
-<span class="ok">test_req5_bad_magic_detected .......... PASSED</span>
-<span class="ok">test_req5_truncation_detected ......... PASSED</span>
-<span class="ok">13 passed in 0.84s</span>
+<span class="c"># The whole story + two tamper tests:</span>
+<span class="kw">./scripts/board_demo.sh</span>
+<span class="ok">ALL STEPS PASSED — the loop is closed</span>
 </pre>
     </div>
   </div>
@@ -1339,8 +1574,9 @@ AXLR_HDR   = <span class="nu">24</span>   <span class="c"># bytes (before payloa
     <a href="https://bigbirdreturns.github.io/axm-chat/">axm-chat</a>
     <a href="https://github.com/BigBirdReturns/axm-embodied">GitHub</a>
   </div>
-  <span class="footer-meta">Robotics spoke · REQ 5 · E_BUFFER_DISCONTINUITY</span>
+  <span class="footer-meta">Robotics spoke · profile embodied@1 · no proof, no motion</span>
 </footer>
+
 
 <script>
 // Nav scroll tracking

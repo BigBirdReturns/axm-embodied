@@ -7,10 +7,6 @@ from pathlib import Path
 from typing import BinaryIO
 from warnings import warn
 
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
-
 from axm_embodied_core.protocol import (
     MAGIC_LATENT_FILE,
     MAGIC_LATENT_REC,
@@ -187,8 +183,16 @@ class StrictJudge:
         return "VERIFIED", hashlib.sha256(data).hexdigest()
 
 
-def compile_streams_evidence(capsule_path: Path, out_path: Path) -> None:
-    """Build ext/streams@1.parquet for Phase 2."""
+def build_streams_evidence(capsule_path: Path) -> list[dict]:
+    """Verify a capsule's binary streams and emit ext/streams@1 rows.
+
+    StrictJudge is the authority: latents are asserted by strict offset
+    math against the log's claimed refs (any disagreement is FATAL), and
+    residuals are discovered by scanning the cold stream directly. The
+    returned rows conform to the streams@1 extension schema
+    (spec/profiles/embodied@1.md section 7); the genesis compiler encodes
+    them as canonical JSONL sorted by (stream, frame_id, offset).
+    """
     judge = StrictJudge(capsule_path)
     evidence: list[dict] = []
 
@@ -229,23 +233,4 @@ def compile_streams_evidence(capsule_path: Path, out_path: Path) -> None:
                     }
                 )
 
-    (Path(out_path) / "evidence").mkdir(parents=True, exist_ok=True)
-
-    df = pd.DataFrame(evidence)
-    if df.empty:
-        return
-
-    schema = pa.schema(
-        [
-            ("frame_id", pa.int32()),
-            ("stream", pa.string()),
-            ("file", pa.string()),
-            ("offset", pa.int64()),
-            ("length", pa.int32()),
-            ("status", pa.string()),
-            ("content_hash", pa.string()),
-        ]
-    )
-
-    table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
-    pq.write_table(table, Path(out_path) / "ext/streams@1.parquet")
+    return evidence

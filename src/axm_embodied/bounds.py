@@ -1,40 +1,39 @@
 #!/usr/bin/env python3
 """
-axm-embodied/tools/compile_bounds.py
+axm-embodied/src/axm_embodied/bounds.py
 
-Phase 2 — Drone School: The Bounds Compiler.
+Drone School: The Bounds Compiler.
 
 Ingests a directory of safe simulation capsules, computes the L-infinity
-norm of the delta between latent vectors and residual payloads per action
-class, takes the 99th percentile across all runs, applies a 1.1x safety
-margin, and emits a Tier-0 Genesis Shard encoding the safety envelope.
+norm of the latent vectors (and, when a cold stream exists, the delta
+between latents and residual payloads) per action class, takes the 99th
+percentile across all runs, applies a 1.1x safety margin, and emits a
+Tier-0 Genesis Shard encoding the safety envelope.
 
 Usage:
-    axm-bounds <safe_dir> <out_dir>
-    axm-bounds demo_safe/ bounds_shard/ 
+    axm-bounds <safe_dir> <out_dir> --key <publisher.key>
 
-The output shard is loaded onto the physical drone. If live sensor delta
-exceeds the signed bounds at runtime, the Shadow Runtime kills motors and
-triggers Flash Freeze. The insurers see a mathematically certified,
-post-quantum signed envelope derived from cryptographically identified
-training runs — not a manually tweaked config file.
+The output shard is what the Shadow Runtime arms with. At runtime, if a
+frame's live latent L-inf exceeds the signed bound for the selected
+action class, the runtime kills motors and triggers Flash Freeze. The
+insurers see a mathematically certified, post-quantum signed envelope
+derived from cryptographically identified training runs — not a manually
+tweaked config file.
 
-Architecture note:
-    Latents and residuals are currently os.urandom() in sim_robot_final.py.
-    With random bytes, the L-inf norm hovers near the float32 dynamic range
-    maximum (~0.98). This is expected and correct — the math executes without
-    modification when real IMU/joint state payloads replace the noise.
-    The only thing that changes is the number, not the code.
+The training manifest (content/source.txt) names every ingested capsule
+by SHA-256, so the envelope's provenance chain reaches all the way down
+to the raw training bytes.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import struct
 import tempfile
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import click
 import numpy as np
@@ -48,18 +47,18 @@ from axm_embodied_core.protocol import (
     LATENT_DIM,
 )
 
-# ── Genesis hub ───────────────────────────────────────────────────────────
+# ── Genesis kernel ────────────────────────────────────────────────────────
 from axm_build.compiler_generic import compile_generic_shard, CompilerConfig
-from axm_build.sign import SUITE_MLDSA44
 
-# Canonical demo key — matches governance/trust_store.json
-# Replace with your HSM-backed key for production deployment.
-_CANONICAL_KEY_SEED = bytes.fromhex(
-    "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
-)
+from axm_embodied.keys import load_secret_key
 
 SAFETY_MARGIN = 1.1
 PERCENTILE = 99
+
+BOUNDS_NAMESPACE = "embodied/bounds"
+BOUND_PREDICATE = "max_latent_delta_linf"
+PUBLISHER_ID = "@drone_school"
+PUBLISHER_NAME = "AXM Bounds Compiler"
 
 
 def _read_latent_payload(lat_path: Path, offset: int) -> np.ndarray:
@@ -106,15 +105,36 @@ def _capsule_hash(capsule_dir: Path) -> str:
     ).hexdigest()
 
 
-def compile_bounds(safe_dir: Path, out_path: Path) -> None:
-    """Ingest safe capsules, compute L-inf envelopes, emit Bounds Shard."""
+def latent_l_inf(latents: np.ndarray) -> float:
+    """L∞ norm of a latent frame against quiescence. NaN/Inf propagate to
+    +inf so a non-finite frame can never sneak under a bound (fail closed)."""
+    if len(latents) == 0:
+        return math.inf
+    m = float(np.abs(latents).max())
+    return m if math.isfinite(m) else math.inf
+
+
+def compile_bounds(
+    safe_dir: Path,
+    out_path: Path,
+    secret_key: bytes,
+    timestamp: Optional[str] = None,
+) -> str:
+    """Ingest safe capsules, compute L-inf envelopes, emit a Bounds Shard.
+
+    Returns the derived sh1_ shard identity — the id the Shadow Runtime
+    cites from every incident recorded under this envelope.
+    """
+    from axm_embodied.compile import derive_shard_id, utc_now_rfc3339
+
     print(f"Drone School: ingesting safe runs from {safe_dir}")
 
     action_deltas: dict[str, list[float]] = defaultdict(list)
     training_capsules: list[tuple[str, str]] = []  # (name, sha256)
+    skipped_nonfinite = 0
 
     # ── 1. Ingest capsules and compute per-frame L-inf deltas ─────────────
-    for capsule_dir in sorted(safe_dir.iterdir()):
+    for capsule_dir in sorted(Path(safe_dir).iterdir()):
         if not capsule_dir.is_dir():
             continue
         events_path = capsule_dir / "events.jsonl"
@@ -146,14 +166,11 @@ def compile_bounds(safe_dir: Path, out_path: Path) -> None:
                 if len(lat_arr) == 0:
                     continue
 
-                # Residuals are only present on trigger frames.
-                # On safe runs cam_residuals.bin is 0 bytes — no records.
-                # We compute latent self-norm as baseline for safe frames.
-                # When residuals exist, we use the true cross-stream delta.
+                # Residuals exist only on trigger frames. On safe runs the
+                # cold stream is 0 bytes and the latent self-norm is the
+                # baseline variance measure (distance from quiescence).
+                l_inf = None
                 if res_path.exists() and res_path.stat().st_size > 0:
-                    # Attempt residual read at same frame position.
-                    # StrictJudge uses scan-based discovery — we mirror that
-                    # by checking the residual index built from events.jsonl.
                     res_ref = refs.get("residuals")
                     if res_ref:
                         res_arr = _read_residual_payload(res_path, res_ref["offset"])
@@ -162,13 +179,15 @@ def compile_bounds(safe_dir: Path, out_path: Path) -> None:
                             l_inf = float(
                                 np.abs(lat_arr[:min_dim] - res_arr[:min_dim]).max()
                             )
-                            action_deltas[action].append(l_inf)
-                            frames_counted += 1
-                            continue
+                if l_inf is None:
+                    l_inf = latent_l_inf(lat_arr)
 
-                # Safe frame: no residual. Use latent L-inf against zero
-                # as the baseline variance measure (how far from quiescence).
-                l_inf = float(np.abs(lat_arr).max())
+                if not math.isfinite(l_inf):
+                    # A non-finite training frame must not widen the
+                    # envelope to infinity; drop it and say so.
+                    skipped_nonfinite += 1
+                    continue
+
                 action_deltas[action].append(l_inf)
                 frames_counted += 1
 
@@ -179,35 +198,39 @@ def compile_bounds(safe_dir: Path, out_path: Path) -> None:
             "No valid frame deltas found. Check that safe_dir contains "
             "capsules with events.jsonl and cam_latents.bin."
         )
+    if skipped_nonfinite:
+        print(f"  WARNING: skipped {skipped_nonfinite} non-finite frames")
 
     # ── 2. Build training manifest (provenance source document) ──────────
-    # This becomes content/source.txt in the shard.
-    # Every claim cites a line from this document as its evidence.
-    # The document is hashed into the Merkle tree — tampering is detectable.
+    # This becomes content/source.txt in the shard. Every claim cites a
+    # line from this document as its evidence. The document is hashed into
+    # the Merkle tree — tampering is detectable.
+    created_at = timestamp or utc_now_rfc3339()
     manifest_lines = [
         "BOUNDS COMPILER: TRAINING MANIFEST",
         "===================================",
-        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        f"Generated: {created_at}",
         f"Capsules: {len(training_capsules)}",
         f"Percentile: {PERCENTILE}",
         f"Safety margin: {SAFETY_MARGIN}",
         "---",
     ]
+    # Single spaces only: the kernel normalizes source text by collapsing
+    # whitespace runs, and evidence spans must match the normalized bytes.
     for name, sha256 in sorted(training_capsules):
-        manifest_lines.append(f"capsule: {name}  sha256: {sha256}")
+        manifest_lines.append(f"capsule: {name} sha256: {sha256}")
     manifest_lines.append("---")
 
     # Per-action summary lines — these are the evidence strings for claims.
-    # Each claim cites the exact line that describes its action class.
     action_summary: dict[str, str] = {}
     for action, deltas in sorted(action_deltas.items()):
         arr = np.array(deltas)
         p99 = float(np.percentile(arr, PERCENTILE))
         bound = round(p99 * SAFETY_MARGIN, 6)
         line = (
-            f"action: {action}  "
-            f"frames: {len(deltas)}  "
-            f"p99_linf: {round(p99, 6)}  "
+            f"action: {action} "
+            f"frames: {len(deltas)} "
+            f"p99_linf: {round(p99, 6)} "
             f"bound: {bound}"
         )
         action_summary[action] = line
@@ -224,30 +247,24 @@ def compile_bounds(safe_dir: Path, out_path: Path) -> None:
         subj = f"bounds/{action}"
         evidence = action_summary[action]  # exact line in source.txt
 
-        # Tier 0: formal invariants — law the drone operates under
-        for pred, val in [
-            ("max_latent_delta_linf", str(bound)),
-            ("sample_count",         str(len(deltas))),
-            ("percentile",           str(PERCENTILE)),
-            ("safety_margin",        str(SAFETY_MARGIN)),
+        # Tier 0: formal invariants — the law the robot operates under
+        for pred, val, obj_type in [
+            (BOUND_PREDICATE, f"{bound:.6f}", "literal:decimal"),
+            ("sample_count", str(len(deltas)), "literal:integer"),
+            ("percentile", str(PERCENTILE), "literal:integer"),
+            ("safety_margin", str(SAFETY_MARGIN), "literal:decimal"),
         ]:
             candidates.append({
                 "subject":     subj,
                 "predicate":   pred,
                 "object":      val,
-                "object_type": "literal:decimal",  # float — must be literal:decimal
+                "object_type": obj_type,
                 "tier":        0,
                 "evidence":    evidence,
             })
 
-    # ── 4. Delegate compilation to genesis hub ────────────────────────────
-    created_at = (
-        datetime.now(timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-
+    # ── 4. Delegate compilation to the genesis kernel ─────────────────────
+    out_path = Path(out_path)
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         source_path = tmp_path / "source.txt"
@@ -262,20 +279,24 @@ def compile_bounds(safe_dir: Path, out_path: Path) -> None:
             source_path=source_path,
             candidates_path=candidates_path,
             out_dir=out_path,
-            private_key=_CANONICAL_KEY_SEED,
-            publisher_id="@drone_school",
-            publisher_name="AXM Bounds Compiler",
-            namespace="embodied/bounds",
+            private_key=secret_key,
+            publisher_id=PUBLISHER_ID,
+            publisher_name=PUBLISHER_NAME,
+            namespace=BOUNDS_NAMESPACE,
             created_at=created_at,
-            suite=SUITE_MLDSA44,
+            title="Safety envelope (bounds shard)",
+            license_spdx="Apache-2.0",
         )
 
         ok = compile_generic_shard(cfg)
         if not ok:
             raise RuntimeError("compile_generic_shard returned False — check candidates")
 
+    shard_id = derive_shard_id(out_path)
+
     # ── 5. Summary ────────────────────────────────────────────────────────
     print(f"\nPASS: Bounds Shard written to {out_path}")
+    print(f"  Shard id:           {shard_id}")
     print(f"  Capsules ingested:  {len(training_capsules)}")
     print(f"  Action classes:     {len(action_deltas)}")
     print(f"  Total frame deltas: {sum(len(v) for v in action_deltas.values())}")
@@ -286,15 +307,24 @@ def compile_bounds(safe_dir: Path, out_path: Path) -> None:
         p99 = float(np.percentile(arr, PERCENTILE))
         bound = round(p99 * SAFETY_MARGIN, 6)
         print(f"    {action:<20} p99={round(p99,4):.4f}  bound={bound:.6f}  n={len(deltas)}")
+    return shard_id
 
 
 @click.command()
 @click.argument("safe_dir", type=click.Path(exists=True, path_type=Path))
 @click.argument("out",      type=click.Path(path_type=Path))
-def main(safe_dir: Path, out: Path) -> None:
+@click.option("--key", "key_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None,
+              help="Path to the 3904-byte axm-hybrid1 secret key blob "
+                   "(axm-build keygen). Falls back to AXM_SIGNING_KEY_HEX.")
+@click.option("--timestamp", default=None, metavar="RFC3339Z",
+              help="Override metadata.created_at (reproducible builds).")
+def main(safe_dir: Path, out: Path, key_path: Optional[Path],
+         timestamp: Optional[str]) -> None:
     """Compile a bounds shard from a directory of safe training capsules."""
     try:
-        compile_bounds(safe_dir, out)
+        secret_key = load_secret_key(key_path)
+        compile_bounds(safe_dir, out, secret_key, timestamp=timestamp)
     except Exception as e:
         print(f"FATAL: {e}")
         raise SystemExit(1)

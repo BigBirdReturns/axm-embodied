@@ -2,91 +2,97 @@
 """
 axm-embodied/src/axm_embodied/compile.py
 
-Post-run compiler: capsule directory -> Genesis shard.
+Post-run compiler: capsule directory -> Genesis v1 shard.
 
 Architecture
 ------------
 This file does exactly two things:
 
-  1. Parse embodied-specific data (events.jsonl, Mens Rea, wheel_slip events)
-     into a canonical candidates.jsonl that the Genesis compiler understands.
+  1. Parse embodied-specific data (events.jsonl, Mens Rea, safety events)
+     into a canonical candidates.jsonl the Genesis kernel understands.
 
-  2. Delegate all shard construction to axm_build.compiler_generic — the only
-     path that produces a genesis-verifiable shard (correct manifest schema,
-     Parquet schemas, Merkle tree, signing, and self-verification).
+  2. Delegate all shard construction to axm_build.compiler_generic — the
+     only path that produces a genesis-verifiable shard (canonical JSONL
+     tables, Merkle tree, axm-hybrid1 signing, self-verification).
 
-Two-pass compilation for cam_latents.bin
------------------------------------------
-compile_generic_shard does not support extra content files (it manages
-content/ itself). cam_latents.bin must be in content/ to become a Merkle
-leaf that triggers REQ 5 continuity checks. We handle this with a
-deterministic two-pass approach:
+The kernel compiler seals the binary streams natively:
 
-  Pass 1: compile events.jsonl -> valid shard (PASS without latents)
-  Inject: copy cam_latents.bin into content/
-  Pass 2: recompute Merkle root (public API: compute_merkle_root)
-          rewrite manifest with new root, re-sign with same key
+  - ``extra_content``: cam_latents.bin (and cam_residuals.bin when the
+    cold stream flushed) are copied into content/, listed in the manifest
+    sources bijection, and hashed into the Merkle tree as raw bytes.
+  - ``profiles=("embodied@1",)``: the shard declares the non-selective
+    recording profile, so every conforming verifier runs the hot-stream
+    continuity check (E_BUFFER_DISCONTINUITY on any frame gap).
+  - ``extra_ext``: StrictJudge's byte-level stream index is published as
+    ext/streams@1.jsonl (spec/profiles/embodied@1.md section 7).
 
-Both passes use the same key material. The final shard contains
-cam_latents.bin as a Merkle leaf, and axm-verify REQ 5 will check it.
+Incident lineage
+----------------
+When a capsule was recorded under an armed Shadow Runtime, pass the
+safety envelope's shard id as ``envelope_shard_id``: breach claims then
+carry an ext/references@1 row citing the exact signed envelope that was
+in force at the moment the motors were killed.
+
+Keys
+----
+There is no default signing key: a signature made with a published key
+proves integrity, never authenticity. Generate a keypair with
+``axm-build keygen`` and pass the 3904-byte secret key blob.
 
 Usage
 -----
-    axm-compile <capsule_dir> <out_dir>
-    axm-compile <capsule_dir> <out_dir> --suite ed25519
-    axm-compile <capsule_dir> <out_dir> --gold
-
-Dependency chain
-----------------
-    sim_robot_final.py  ->  capsule/
-    compile.py          ->  shard/           (this file)
-    axm_embodied.streams                     (ext/streams@1.parquet)
-    axm_build.compiler_generic               (canonical shard compilation)
-    axm_build.merkle.compute_merkle_root     (re-seal after latent injection)
-    axm_verify.logic                         (self-verification gate)
+    axm-compile <capsule_dir> <out_dir> --key <publisher.key>
+    axm-compile <capsule_dir> <out_dir> --key <publisher.key> \
+        --cites sh1_<envelope shard id>
 """
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
+import blake3
 import click
 
-# Genesis compiler: the only path to a verifiable shard
+# Genesis kernel: the only path to a verifiable shard
 from axm_build.compiler_generic import CompilerConfig, compile_generic_shard
-from axm_build.manifest import dumps_canonical_json
-from axm_build.merkle import compute_merkle_root
-from axm_build.sign import (
-    SUITE_ED25519,
-    SUITE_MLDSA44,
-    mldsa44_keygen,
-    mldsa44_sign,
-    signing_key_from_private_key_bytes,
-)
-from axm_verify.logic import verify_shard as _verify_shard
 
 # Binary stream evidence: embodied-specific, stays local
-from axm_embodied.streams import compile_streams_evidence
+from axm_embodied.keys import load_secret_key
+from axm_embodied.streams import build_streams_evidence
 
-# Canonical demo key (Ed25519, matches governance/trust_store.json)
-_CANONICAL_PUBLISHER_SEED = bytes.fromhex(
-    "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
-)
-GOLD_TIMESTAMP = "2026-01-01T00:00:00Z"
+PROFILE_EMBODIED_V1 = "embodied@1"
 
-_NAMESPACE    = "embodied/wheel_slip"
+_NAMESPACE = "embodied/incident"
 _PUBLISHER_ID = "@axm_embodied"
 _PUBLISHER_NAME = "AXM Embodied"
+
+
+def utc_now_rfc3339() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def derive_shard_id(shard_dir: Path) -> str:
+    """shard_id = "sh1_" + hex(BLAKE3(manifest bytes)) — derived, never stored."""
+    manifest_bytes = (Path(shard_dir) / "manifest.json").read_bytes()
+    return "sh1_" + blake3.blake3(manifest_bytes).hexdigest()
 
 
 # ---------------------------------------------------------------------------
 # Step 1: Extract embodied events -> candidates
 # ---------------------------------------------------------------------------
 
-def _extract_candidates(events_path: Path) -> list[dict]:
+def _extract_candidates(
+    events_path: Path,
+    envelope_shard_id: Optional[str] = None,
+) -> list[dict]:
     """Parse events.jsonl into Genesis-compatible candidates.
 
     Each candidate:  subject, predicate, object, object_type, tier, evidence
@@ -100,25 +106,44 @@ def _extract_candidates(events_path: Path) -> list[dict]:
     candidates: list[dict] = []
     seen: set[str] = set()
 
-    def _add(subj: str, pred: str, obj: str, obj_type: str, tier: int, ev: str) -> None:
-        if ev in seen:
+    envelope_ref = None
+    if envelope_shard_id:
+        envelope_ref = [{
+            "dst_shard_id": envelope_shard_id,
+            "relation_type": "cites",
+            "dst_object_type": "shard",
+            "dst_object_id": "",
+            "confidence": "1.0",
+            "note": "safety envelope in force at the moment of the breach",
+        }]
+
+    def _add(subj: str, pred: str, obj: str, obj_type: str, tier: int, ev: str,
+             references: Optional[list] = None) -> None:
+        # Dedupe exact duplicate candidates; multiple DIFFERENT claims may
+        # cite the same event line (the kernel dedupes rows by primary key).
+        key = f"{subj}\x00{pred}\x00{obj}\x00{obj_type}\x00{ev}"
+        if key in seen:
             return
-        seen.add(ev)
-        candidates.append({
+        seen.add(key)
+        cand = {
             "subject": subj, "predicate": pred, "object": obj,
             "object_type": obj_type, "tier": tier, "evidence": ev,
-        })
+        }
+        if references:
+            cand["references"] = references
+        candidates.append(cand)
 
     for line_bytes in raw_bytes.split(b"\n"):
         if not line_bytes:
             continue
         text = line_bytes.decode("utf-8")
         evt = json.loads(text)
+        robot = evt.get("robot_id", "robot-001")
 
         if evt.get("evt") == "wheel_slip":
-            robot = evt.get("robot_id", "robot-001")
             _add(robot, "observed", "wheel_slip", "entity", 2, text)
-            _add("wheel_slip", "on_surface", evt["surface"], "literal:string", 2, text)
+            if "surface" in evt:
+                _add("wheel_slip", "on_surface", evt["surface"], "literal:string", 2, text)
 
         elif evt.get("evt") == "recovery_action":
             _add("wheel_slip", "resolved_by", evt["action"], "entity", 1, text)
@@ -126,12 +151,24 @@ def _extract_candidates(events_path: Path) -> list[dict]:
                  "literal:string", 2, text)
 
         elif evt.get("evt") == "emergency_stop":
-            robot = evt.get("robot_id", "robot-001")
             _add(robot, "triggered", "emergency_stop", "entity", 1, text)
+
+        elif evt.get("evt") == "envelope_breach":
+            # Actus Reus of the Shadow Runtime: physics left the signed
+            # envelope. These claims cite the envelope shard (references@1)
+            # so the incident is cryptographically linked to the exact law
+            # it broke.
+            _add(robot, "breached_envelope", str(evt.get("action", "")),
+                 "literal:string", 1, text, references=envelope_ref)
+            if isinstance(evt.get("l_inf"), (int, float)):
+                _add(f"breach/frame-{evt['frame_id']}", "observed_l_inf",
+                     str(evt["l_inf"]), "literal:decimal", 1, text)
+            if isinstance(evt.get("bound"), (int, float)):
+                _add(f"breach/frame-{evt['frame_id']}", "envelope_bound",
+                     str(evt["bound"]), "literal:decimal", 1, text)
 
         # Mens Rea: action distribution on every frame
         if "selected_action" in evt and "action_distribution" in evt:
-            robot = evt.get("robot_id", "robot-001")
             _add(robot, "selected_action", evt["selected_action"], "entity", 1, text)
             for action, conf in evt["action_distribution"].items():
                 lit = json.dumps({"action": action, "confidence": conf},
@@ -142,148 +179,90 @@ def _extract_candidates(events_path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Inject cam_latents.bin and re-seal the shard (pass 2)
-# ---------------------------------------------------------------------------
-
-def _inject_latents_and_reseal(
-    out_path: Path,
-    lat_src: Path,
-    suite: str,
-    sk_bytes: bytes,   # raw signing key (32 B for Ed25519, 2528 B for ML-DSA-44)
-    pk_bytes: bytes,   # public key bytes (already written to sig/publisher.pub)
-) -> None:
-    """Copy cam_latents.bin into content/, recompute Merkle root, re-sign manifest.
-
-    After this call the shard includes cam_latents.bin as a proper Merkle leaf.
-    axm-verify REQ 5 will check frame continuity against it.
-    """
-    shutil.copy2(lat_src, out_path / "content" / "cam_latents.bin")
-
-    # Recompute root over all files including the new latent file
-    new_root = compute_merkle_root(out_path, suite=suite)
-
-    # Rewrite manifest with updated Merkle root
-    manifest = json.loads((out_path / "manifest.json").read_bytes())
-    manifest["integrity"]["merkle_root"] = new_root
-    manifest["shard_id"] = f"shard_blake3_{new_root}"
-
-    man_bytes = dumps_canonical_json(manifest)
-    (out_path / "manifest.json").write_bytes(man_bytes)
-
-    # Re-sign manifest
-    if suite == SUITE_MLDSA44:
-        sig = mldsa44_sign(sk_bytes, man_bytes)
-    else:
-        from nacl.signing import SigningKey
-        nacl_sk = SigningKey(sk_bytes)
-        sig = nacl_sk.sign(man_bytes).signature
-
-    (out_path / "sig" / "manifest.sig").write_bytes(sig)
-
-    # Verify the resealed shard
-    result = _verify_shard(out_path, trusted_key_path=out_path / "sig" / "publisher.pub")
-    if result["status"] != "PASS":
-        raise RuntimeError(
-            f"Shard failed verification after latent injection: {result['errors']}"
-        )
-
-
-# ---------------------------------------------------------------------------
 # Compile
 # ---------------------------------------------------------------------------
 
 def compile_capsule(
     capsule_path: Path,
     out_path: Path,
-    signing_key: bytes | None = None,
-    timestamp: str | None = None,
-    suite: str = SUITE_MLDSA44,
-) -> None:
+    secret_key: bytes,
+    timestamp: Optional[str] = None,
+    envelope_shard_id: Optional[str] = None,
+) -> str:
     """Compile a capsule directory into a genesis-verifiable shard.
 
-    Output passes:  axm-verify shard <out_path>
+    Returns the derived sh1_ shard identity. The kernel compiler
+    self-verifies: it will not return success for a shard that fails
+    axm-verify (including the embodied@1 continuity check).
     """
+    capsule_path = Path(capsule_path)
+    out_path = Path(out_path)
     print(f"Compiling capsule: {capsule_path}")
-    print(f"  Suite: {suite}")
 
     events_path = capsule_path / "events.jsonl"
     if not events_path.exists():
         raise FileNotFoundError(f"No events.jsonl in {capsule_path}")
 
-    if timestamp is None:
-        timestamp = (
-            datetime.now(timezone.utc)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
+    candidates = _extract_candidates(events_path, envelope_shard_id)
+    if not candidates:
+        raise ValueError(f"No candidates extracted from {events_path}")
 
-    # Build key material
-    if suite == SUITE_MLDSA44:
-        kp = mldsa44_keygen()
-        sk_raw = kp.secret_key            # 2528 B
-        pk_raw = kp.public_key            # 1312 B
-        private_key_for_cfg = sk_raw + pk_raw  # 3840 B — what CompilerConfig expects
-    else:
-        nacl_sk = signing_key_from_private_key_bytes(signing_key or _CANONICAL_PUBLISHER_SEED)
-        sk_raw = bytes(nacl_sk)           # 32 B
-        pk_raw = bytes(nacl_sk.verify_key)
-        private_key_for_cfg = sk_raw
+    # StrictJudge: verify binary streams BEFORE sealing anything. Disk is
+    # truth — a capsule whose log disagrees with its bytes never compiles.
+    lat_src = capsule_path / "cam_latents.bin"
+    streams_rows = build_streams_evidence(capsule_path) if lat_src.exists() else []
 
-    work_dir = Path(tempfile.mkdtemp(prefix="axm_compile_"))
-    try:
-        source_path = work_dir / "source.txt"
-        shutil.copy2(events_path, source_path)
+    extra_content: list[tuple[str, Path]] = []
+    if lat_src.exists():
+        extra_content.append(("cam_latents.bin", lat_src))
+    res_src = capsule_path / "cam_residuals.bin"
+    if res_src.exists() and res_src.stat().st_size > 0:
+        extra_content.append(("cam_residuals.bin", res_src))
 
-        candidates = _extract_candidates(events_path)
-        if not candidates:
-            raise ValueError(f"No candidates extracted from {events_path}")
-
-        candidates_path = work_dir / "candidates.jsonl"
-        with candidates_path.open("w") as f:
+    with tempfile.TemporaryDirectory(prefix="axm_compile_") as tmp:
+        candidates_path = Path(tmp) / "candidates.jsonl"
+        with candidates_path.open("w", encoding="utf-8") as f:
             for c in candidates:
                 f.write(json.dumps(c, ensure_ascii=False) + "\n")
 
-        # ── Pass 1: compile via genesis (correct manifest + parquet + signing) ──
         cfg = CompilerConfig(
-            source_path=source_path,
+            source_path=events_path,
             candidates_path=candidates_path,
             out_dir=out_path,
-            private_key=private_key_for_cfg,
+            private_key=secret_key,
             publisher_id=_PUBLISHER_ID,
             publisher_name=_PUBLISHER_NAME,
             namespace=_NAMESPACE,
-            created_at=timestamp,
-            suite=suite,
+            created_at=timestamp or utc_now_rfc3339(),
+            title=f"Flash Freeze capsule {capsule_path.name}",
+            license_spdx="Apache-2.0",
+            profiles=(PROFILE_EMBODIED_V1,),
+            extra_content=tuple(extra_content),
+            extra_ext={"streams@1": streams_rows} if streams_rows else None,
         )
 
         ok = compile_generic_shard(cfg)
         if not ok:
-            raise RuntimeError("compile_generic_shard returned False (no claims compiled)")
+            raise RuntimeError(
+                "Genesis kernel rejected the shard (self-verification failed "
+                "or no claims compiled)"
+            )
 
-        # ── Pass 2: inject cam_latents.bin and reseal ────────────────────────
-        lat_src = capsule_path / "cam_latents.bin"
-        if lat_src.exists():
-            _inject_latents_and_reseal(out_path, lat_src, suite, sk_raw, pk_raw)
-            print(f"  Latents: content/cam_latents.bin sealed in Merkle tree")
-
-        # ── Write binary stream evidence (ext/ — domain extension) ──────────
-        if lat_src.exists():
-            compile_streams_evidence(capsule_path, out_path)
-            print(f"  Streams: ext/streams@1.parquet written")
-
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
-
+    shard_id = derive_shard_id(out_path)
     manifest = json.loads((out_path / "manifest.json").read_bytes())
-    stats   = manifest.get("statistics", {})
-    merkle  = manifest.get("integrity", {}).get("merkle_root", "?")
+    stats = manifest.get("statistics", {})
 
     print(f"PASS: Shard written to {out_path}")
+    print(f"  Shard id: {shard_id}")
     print(f"  Entities: {stats.get('entities', 0)}")
     print(f"  Claims:   {stats.get('claims', 0)}")
-    print(f"  Suite:    {manifest.get('suite', suite)}")
-    print(f"  Merkle:   {merkle[:32]}...")
+    print(f"  Suite:    {manifest.get('suite')}")
+    print(f"  Profiles: {', '.join(manifest.get('profiles', []))}")
+    if streams_rows:
+        print(f"  Streams:  ext/streams@1.jsonl ({len(streams_rows)} records)")
+    if envelope_shard_id:
+        print(f"  Cites:    {envelope_shard_id}")
+    return shard_id
 
 
 # ---------------------------------------------------------------------------
@@ -292,31 +271,28 @@ def compile_capsule(
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True, path_type=Path))
-@click.argument("out",     type=click.Path(path_type=Path))
-@click.option(
-    "--suite", "suite_name",
-    type=click.Choice([SUITE_MLDSA44, SUITE_ED25519]),
-    default=SUITE_MLDSA44, show_default=True,
-    help="Cryptographic suite.",
-)
-@click.option("--legacy", is_flag=True, default=False,
-              help=f"Alias for --suite {SUITE_ED25519}.")
-@click.option("--gold", is_flag=True,
-              help="Use canonical test key + timestamp (reproducible gold shards, ed25519).")
-def main(capsule: Path, out: Path, suite_name: str, legacy: bool, gold: bool) -> None:
+@click.argument("out", type=click.Path(path_type=Path))
+@click.option("--key", "key_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None,
+              help="Path to the 3904-byte axm-hybrid1 secret key blob "
+                   "(axm-build keygen). Falls back to AXM_SIGNING_KEY_HEX.")
+@click.option("--cites", "envelope_shard_id", default=None, metavar="SH1_ID",
+              help="Safety envelope shard id this incident was recorded under; "
+                   "breach claims will cite it via ext/references@1.")
+@click.option("--timestamp", default=None, metavar="RFC3339Z",
+              help="Override metadata.created_at (reproducible builds).")
+def main(capsule: Path, out: Path, key_path: Optional[Path],
+         envelope_shard_id: Optional[str], timestamp: Optional[str]) -> None:
     """Compile a capsule directory into a Genesis shard.
 
-    Output passes axm-verify shard with a clean PASS.
+    Output passes `axm-verify shard` with the embodied@1 profile checked.
     """
-    effective_suite = (
-        SUITE_ED25519 if (legacy or suite_name == SUITE_ED25519) else SUITE_MLDSA44
-    )
     try:
+        secret_key = load_secret_key(key_path)
         compile_capsule(
-            capsule, out,
-            signing_key=_CANONICAL_PUBLISHER_SEED if gold else None,
-            timestamp=GOLD_TIMESTAMP if gold else None,
-            suite=effective_suite,
+            capsule, out, secret_key,
+            timestamp=timestamp,
+            envelope_shard_id=envelope_shard_id,
         )
     except Exception as e:
         print(f"FATAL: {e}")
