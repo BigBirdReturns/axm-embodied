@@ -14,9 +14,11 @@ dependencies = [
   # All cryptography (blake3, pynacl, ML-DSA-44) and all shard
   # construction/verification comes from the axm-genesis kernel. Embodied
   # does not own or version the math layer.
-  # NOTE: pinned to the feature branch until the extra_content/streams@1
-  # kernel additions merge; repin to a tagged release after that.
-  "axm-genesis[mldsa-compat] @ git+https://github.com/BigBirdReturns/axm-genesis.git@claude/embodied-repo-flight-recorder-pg8x01",
+  # Pinned to the v1 kernel commit that carries extra_content, the JSONL
+  # streams@1 extension, and the embodied@1 profile continuity check (the
+  # same commit the sibling spokes pin). After the v1.0.0 PyPI release this
+  # moves to the range `axm-genesis[mldsa-compat]>=1.0.0,<2`.
+  "axm-genesis[mldsa-compat] @ git+https://github.com/BigBirdReturns/axm-genesis.git@fffe7cf0f1c78c8c4bea5f303099db80f7c53ba3",
 
   # ── Embodied-specific ─────────────────────────────────────────────────
   "numpy>=1.24.0",

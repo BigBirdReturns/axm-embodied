@@ -72,7 +72,7 @@ records it.
 - **Migrated to the axm-genesis v1 kernel** (v1.0.0rc1, RFC 0002 reset):
   - Suite is `axm-hybrid1` (Ed25519 + ML-DSA-44); the `--legacy`/`--gold`
     Ed25519-only paths are gone.
-  - Core tables are canonical JSONL; `ext/streams@1.parquet` is now
+  - Core tables are canonical JSONL; `ext/streams@1.parquet` is now <!-- drift-ok: changelog names the retired Parquet table the v1 migration replaced -->
     `ext/streams@1.jsonl`. pandas/pyarrow dependencies dropped.
   - Shards declare the frozen kernel profile `"embodied@1"`; any
     conforming verifier runs the hot-stream continuity check.

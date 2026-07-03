@@ -1,0 +1,47 @@
+# Enforce the kernel boundary: the spoke's tests (which compile a capsule and
+# run it through axm-verify, including the embodied@1 continuity check) plus the
+# drift-check (kernel-boundary lint, sourced from genesis) run on every push.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: axm-embodied
+
+      # One genesis checkout serves both roles: the kernel we install and the
+      # tree the drift-check is sourced from. Pinned until the kernel is on
+      # PyPI; keep in sync with the pin in pyproject.toml.
+      - uses: actions/checkout@v4
+        with:
+          repository: BigBirdReturns/axm-genesis
+          ref: fffe7cf0f1c78c8c4bea5f303099db80f7c53ba3
+          path: axm-genesis
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install kernel and spoke
+        run: |
+          python -m pip install --upgrade pip
+          # Kernel from the checkout above (with the ML-DSA backend).
+          pip install './axm-genesis[mldsa-compat]'
+          # Editable spoke WITHOUT re-resolving its deps: the git-pinned kernel
+          # is already installed from the checkout. Install the third-party
+          # runtime/test deps explicitly.
+          pip install -e './axm-embodied' --no-deps
+          pip install pytest numpy click
+
+      - name: Tests (compile -> axm-verify -> embodied@1 continuity)
+        working-directory: axm-embodied
+        run: python -m pytest tests/ -q
+
+      - name: Drift check (kernel-boundary lint, sourced from genesis)
+        run: bash axm-genesis/tools/drift-check.sh axm-embodied
