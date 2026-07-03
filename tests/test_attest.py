@@ -91,7 +91,7 @@ def test_runtime_seal_queues_attestation(bounds_shard, governance, tmp_path, rob
     assert verify_entry_matches_shard(incident.attestation_path, incident.shard_path)
 
     record = json.loads((incident.attestation_path / "record.json").read_text())
-    assert record["shard_id"] == incident.shard_id
+    assert record["shard_id"] == incident.shard_id  # drift-ok: attestation record references the shard by its derived sh1_ id (RFC 0005 pattern), not stored manifest identity
     assert "envelope breach at frame 20" in record["note"]
     assert rt.envelope.shard_id in record["note"]
 

@@ -8,7 +8,7 @@
 **Audience:** Robotics manufacturers, safety boards, auditors, regulators, systems engineers
 
 > **Historical note (v2.0.0 migration).** This document describes the
-> spoke-era shard format (Parquet tables, `ed25519` / `axm-blake3-mldsa44`
+> spoke-era shard format (Parquet tables, `ed25519` / `axm-blake3-mldsa44` <!-- drift-ok: historical spoke-era format; the binding format is now the axm-genesis v1 kernel spec -->
 > suites). As of axm-embodied 2.0.0 the binding format is the axm-genesis
 > v1 kernel specification (`spec/v1/SPECIFICATION.md`: canonical JSONL
 > tables, single `axm-hybrid1` suite) and the frozen stream profile
@@ -153,11 +153,11 @@ shard/
 ├── manifest.json
 ├── content/
 ├── graph/
-│   ├── entities.parquet
-│   ├── claims.parquet
-│   └── provenance.parquet
+│   ├── entities.parquet  # drift-ok
+│   ├── claims.parquet  # drift-ok
+│   └── provenance.parquet  # drift-ok
 ├── evidence/
-│   └── spans.parquet
+│   └── spans.parquet  # drift-ok
 ├── sig/
 │   ├── manifest.sig
 │   └── publisher.pub
@@ -202,7 +202,7 @@ Prefixes:
 
 ## 8. Graph Tables
 
-### 8.1 entities.parquet
+### 8.1 entities.parquet <!-- drift-ok: historical spoke-era format; the binding format is now the axm-genesis v1 kernel spec -->
 
 | Column    | Type   |
 | --------- | ------ |
@@ -211,7 +211,7 @@ Prefixes:
 | label     | string |
 | type      | string |
 
-### 8.2 claims.parquet
+### 8.2 claims.parquet <!-- drift-ok: historical spoke-era format; the binding format is now the axm-genesis v1 kernel spec -->
 
 | Column      | Type   |
 | ----------- | ------ |
@@ -236,7 +236,7 @@ Valid tier values: 0–4
 
 ## 9. Evidence and Provenance
 
-### 9.1 spans.parquet
+### 9.1 spans.parquet <!-- drift-ok: historical spoke-era format; the binding format is now the axm-genesis v1 kernel spec -->
 
 | Column      | Type   |
 | ----------- | ------ |
@@ -248,7 +248,7 @@ Valid tier values: 0–4
 
 The text field must match the exact byte slice from events.jsonl.
 
-### 9.2 provenance.parquet
+### 9.2 provenance.parquet <!-- drift-ok: historical spoke-era format; the binding format is now the axm-genesis v1 kernel spec -->
 
 | Column        | Type   |
 | ------------- | ------ |
@@ -328,7 +328,7 @@ Two suites are supported, declared via the `suite` field in `manifest.json`.
 
 | Suite | Status | Algorithm |
 |-------|--------|-----------|
-| `axm-blake3-mldsa44` | **Default** | ML-DSA-44 (FIPS 204), post-quantum |
+| `axm-blake3-mldsa44` | **Default** | ML-DSA-44 (FIPS 204), post-quantum | <!-- drift-ok: historical spoke-era format; the binding format is now the axm-genesis v1 kernel spec -->
 | `ed25519` | Legacy | Ed25519, backward-compatible |
 
 When `suite` is absent, implementations must default to `ed25519` (v1.0 shard compatibility).

@@ -42,7 +42,7 @@ def span_id(src_hash: str, start: int, end: int, text: str) -> str:
     """Generate deterministic span ID from source hash + byte range + text.
 
     Frozen. Identical to original embodied implementation.
-    Changing this invalidates all historical evidence/spans.parquet joins.
+    Changing this invalidates all historical evidence/spans.jsonl joins.
     """
     payload = f"{src_hash}\x00{start}\x00{end}\x00{text}"
     return _hash(payload.encode("utf-8"), "s_")
