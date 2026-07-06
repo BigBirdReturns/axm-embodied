@@ -18,7 +18,7 @@ dependencies = [
   # streams@1 extension, and the embodied@1 profile continuity check (the
   # same commit the sibling spokes pin). After the v1.0.0 PyPI release this
   # moves to the range `axm-genesis[mldsa-compat]>=1.0.0,<2`.
-  "axm-genesis[mldsa-compat] @ git+https://github.com/BigBirdReturns/axm-genesis.git@fffe7cf0f1c78c8c4bea5f303099db80f7c53ba3",
+  "axm-genesis[mldsa-compat] @ git+https://github.com/BigBirdReturns/axm-genesis.git@9074e7fb2e9cedde692b248cdd0c6a805e77d8ac",
 
   # ── Embodied-specific ─────────────────────────────────────────────────
   "numpy>=1.24.0",
