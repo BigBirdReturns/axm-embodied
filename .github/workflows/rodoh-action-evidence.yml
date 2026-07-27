@@ -11,6 +11,7 @@ on:
       - 'tests/test_action_session.py'
       - 'tests/test_action_spool.py'
       - 'tests/test_strict_action_json.py'
+      - 'tests/test_action_evidence_workflow.py'
       - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
       - '.github/workflows/rodoh-action-evidence.yml'
   push:
@@ -25,6 +26,7 @@ on:
       - 'tests/test_action_session.py'
       - 'tests/test_action_spool.py'
       - 'tests/test_strict_action_json.py'
+      - 'tests/test_action_evidence_workflow.py'
       - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
       - '.github/workflows/rodoh-action-evidence.yml'
   workflow_dispatch:
@@ -36,6 +38,9 @@ concurrency:
   group: rodoh-action-evidence-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  EXACT_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   custody:
     runs-on: ubuntu-24.04
@@ -45,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.EXACT_CANDIDATE }}
           fetch-depth: 0
           show-progress: false
       - uses: actions/setup-python@v5
@@ -56,10 +61,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git rev-parse HEAD)" = "$EXACT_CANDIDATE"
           test -z "$(git status --porcelain)"
           mkdir -p "$RECEIPT_DIR"
-          printf '%s\n' '${{ github.event.pull_request.head.sha || github.sha }}' > "$RECEIPT_DIR/candidate-sha.txt"
+          printf '%s\n' "$EXACT_CANDIDATE" > "$RECEIPT_DIR/candidate-sha.txt"
       - name: Install exact project and test dependencies
         shell: bash
         run: |
@@ -74,6 +79,7 @@ jobs:
             tests/test_strict_action_json.py \
             tests/test_action_session.py \
             tests/test_action_spool.py \
+            tests/test_action_evidence_workflow.py \
             2>&1 | tee "$RECEIPT_DIR/focused.log"
       - name: Complete embodied regression and clean source proof
         shell: bash
@@ -89,7 +95,7 @@ jobs:
           receipt = {
               "format": "axm-embodied-action-evidence-qualification/1",
               "status": "pass",
-              "candidate": os.environ.get("GITHUB_SHA", "unknown"),
+              "candidate": os.environ["EXACT_CANDIDATE"],
               "python": os.popen("python --version").read().strip(),
               "checks": [
                   "duplicate-key-refusal",
@@ -102,6 +108,7 @@ jobs:
                   "path-escape-refusal",
                   "payload-hash-refusal",
                   "transactional-rollback",
+                  "workflow-contract",
                   "complete-regression",
                   "clean-checkout",
               ],
