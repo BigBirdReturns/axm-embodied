@@ -1,0 +1,77 @@
+name: RODOH action spool ingestion
+
+on:
+  pull_request:
+    paths:
+      - 'src/axm_embodied/action_session.py'
+      - 'src/axm_embodied/action_spool.py'
+      - 'tests/test_action_session.py'
+      - 'tests/test_action_spool.py'
+      - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
+      - '.github/workflows/rodoh-action-spool.yml'
+  push:
+    branches:
+      - feature/rodoh-action-session-evidence-v1
+    paths:
+      - 'src/axm_embodied/action_session.py'
+      - 'src/axm_embodied/action_spool.py'
+      - 'tests/test_action_session.py'
+      - 'tests/test_action_spool.py'
+      - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
+      - '.github/workflows/rodoh-action-spool.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rodoh-action-spool-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ingest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          show-progress: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install exact project and test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Spool restart, tamper, rollback, and authority gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p action-spool-receipt
+          python -m pytest -q tests/test_action_spool.py tests/test_action_session.py \
+            2>&1 | tee action-spool-receipt/focused.log
+
+      - name: Complete embodied regression and exact source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest -q 2>&1 | tee action-spool-receipt/complete.log
+          git diff --check
+          test -z "$(git status --porcelain)"
+          printf '%s\n' '${{ github.event.pull_request.head.sha || github.sha }}' > action-spool-receipt/candidate-sha.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rodoh-action-spool-ingestion
+          path: action-spool-receipt
+          if-no-files-found: warn
+          retention-days: 30
