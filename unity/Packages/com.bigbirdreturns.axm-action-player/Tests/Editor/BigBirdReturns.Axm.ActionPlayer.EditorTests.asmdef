@@ -1,0 +1,21 @@
+{
+  "name": "BigBirdReturns.Axm.ActionPlayer.EditorTests",
+  "rootNamespace": "BigBirdReturns.Axm.ActionPlayer.Tests",
+  "references": [
+    "BigBirdReturns.Axm.ActionPlayer"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
