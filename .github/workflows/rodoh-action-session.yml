@@ -28,6 +28,8 @@ jobs:
   custody:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      RECEIPT_DIR: ${{ runner.temp }}/action-session-receipt
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,23 +53,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p action-session-receipt
-          python -m pytest -q tests/test_action_session.py 2>&1 | tee action-session-receipt/focused.log
+          mkdir -p "$RECEIPT_DIR"
+          python -m pytest -q tests/test_action_session.py 2>&1 | tee "$RECEIPT_DIR/focused.log"
 
       - name: Complete embodied regression
         shell: bash
         run: |
           set -euo pipefail
-          python -m pytest -q 2>&1 | tee action-session-receipt/complete.log
+          python -m pytest -q 2>&1 | tee "$RECEIPT_DIR/complete.log"
           git diff --check
           test -z "$(git status --porcelain)"
-          printf '%s\n' '${{ github.event.pull_request.head.sha || github.sha }}' > action-session-receipt/candidate-sha.txt
+          printf '%s\n' '${{ github.event.pull_request.head.sha || github.sha }}' > "$RECEIPT_DIR/candidate-sha.txt"
 
       - name: Upload action-session evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rodoh-action-session-custody
-          path: action-session-receipt
+          path: ${{ runner.temp }}/action-session-receipt
           if-no-files-found: warn
           retention-days: 30
