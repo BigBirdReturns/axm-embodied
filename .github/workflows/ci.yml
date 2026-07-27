@@ -1,6 +1,6 @@
-# Enforce the kernel boundary: the spoke's tests (which compile a capsule and
-# run it through axm-verify, including the embodied@1 continuity check) plus the
-# drift-check (kernel-boundary lint, sourced from genesis) run on every push.
+# Enforce the Genesis kernel boundary and the complete RODOH physical-action
+# custody boundary in one permanent workflow. Receipts live outside the source
+# checkout and bind the exact pull-request head or push SHA.
 name: ci
 
 on:
@@ -10,14 +10,19 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      RECEIPT_DIR: ${{ runner.temp }}/rodoh-action-evidence
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: axm-embodied
+          fetch-depth: 0
+          show-progress: false
 
-      # One genesis checkout serves both roles: the kernel we install and the
-      # tree the drift-check is sourced from. Pinned until the kernel is on
-      # PyPI; keep in sync with the pin in pyproject.toml.
+      # One Genesis checkout serves both roles: the kernel we install and the
+      # tree the drift-check is sourced from. Keep this pin aligned with
+      # pyproject.toml until the kernel dependency moves to a released range.
       - uses: actions/checkout@v4
         with:
           repository: BigBirdReturns/axm-genesis
@@ -28,20 +33,85 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Record exact candidate identity
+        working-directory: axm-embodied
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain)"
+          mkdir -p "$RECEIPT_DIR"
+          printf '%s\n' "$expected" > "$RECEIPT_DIR/candidate-sha.txt"
+
       - name: Install kernel and spoke
         run: |
           python -m pip install --upgrade pip
-          # Kernel from the checkout above (with the ML-DSA backend).
           pip install './axm-genesis[mldsa-compat]'
-          # Editable spoke WITHOUT re-resolving its deps: the git-pinned kernel
-          # is already installed from the checkout. Install the third-party
-          # runtime/test deps explicitly.
           pip install -e './axm-embodied' --no-deps
           pip install pytest numpy click
 
-      - name: Tests (compile -> axm-verify -> embodied@1 continuity)
+      - name: Strict JSON, session authority, and spool transaction gate
         working-directory: axm-embodied
-        run: python -m pytest tests/ -q
+        run: |
+          set -euo pipefail
+          python -m pytest -q \
+            tests/test_strict_action_json.py \
+            tests/test_action_session.py \
+            tests/test_action_spool.py \
+            2>&1 | tee "$RECEIPT_DIR/focused.log"
 
-      - name: Drift check (kernel-boundary lint, sourced from genesis)
-        run: bash axm-genesis/tools/drift-check.sh axm-embodied
+      - name: Complete regression
+        working-directory: axm-embodied
+        run: |
+          set -euo pipefail
+          python -m pytest tests/ -q 2>&1 | tee "$RECEIPT_DIR/complete.log"
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+      - name: Drift check (kernel-boundary lint, sourced from Genesis)
+        run: bash axm-genesis/tools/drift-check.sh axm-embodied | tee "$RECEIPT_DIR/drift.log"
+
+      - name: Write exact action-evidence qualification
+        working-directory: axm-embodied
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          from pathlib import Path
+
+          root = Path(os.environ["RECEIPT_DIR"])
+          candidate = (root / "candidate-sha.txt").read_text().strip()
+          receipt = {
+              "format": "axm-embodied-action-evidence-qualification/1",
+              "status": "pass",
+              "candidate": candidate,
+              "python": platform.python_version(),
+              "genesisCommit": "9074e7fb2e9cedde692b248cdd0c6a805e77d8ac",
+              "checks": [
+                  "duplicate-key-refusal",
+                  "bounded-json",
+                  "session-authority",
+                  "candidate-before-receipt",
+                  "hash-chain-tamper-refusal",
+                  "spool-restart",
+                  "sequence-rollback-refusal",
+                  "path-escape-refusal",
+                  "payload-hash-refusal",
+                  "transactional-rollback",
+                  "complete-regression",
+                  "kernel-boundary-drift",
+                  "clean-checkout",
+              ],
+          }
+          (root / "qualification.json").write_text(json.dumps(receipt, indent=2) + "\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rodoh-action-evidence-custody
+          path: ${{ runner.temp }}/rodoh-action-evidence
+          if-no-files-found: warn
+          retention-days: 30
