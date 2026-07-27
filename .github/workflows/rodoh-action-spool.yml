@@ -3,8 +3,11 @@ name: RODOH action spool ingestion
 on:
   pull_request:
     paths:
+      - '.gitignore'
       - 'src/axm_embodied/action_session.py'
+      - 'src/axm_embodied/action_session_strict.py'
       - 'src/axm_embodied/action_spool.py'
+      - 'src/axm_embodied/action_spool_strict.py'
       - 'tests/test_action_session.py'
       - 'tests/test_action_spool.py'
       - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
@@ -13,8 +16,11 @@ on:
     branches:
       - feature/rodoh-action-session-evidence-v1
     paths:
+      - '.gitignore'
       - 'src/axm_embodied/action_session.py'
+      - 'src/axm_embodied/action_session_strict.py'
       - 'src/axm_embodied/action_spool.py'
+      - 'src/axm_embodied/action_spool_strict.py'
       - 'tests/test_action_session.py'
       - 'tests/test_action_spool.py'
       - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
