@@ -1,3 +1,4 @@
+# Exact post-v1 action-evidence artifact retrigger after workflow consolidation.
 # Enforce the Genesis kernel boundary and the complete RODOH physical-action
 # custody boundary in one permanent workflow. Receipts live outside the source
 # checkout and bind the exact pull-request head or push SHA.
