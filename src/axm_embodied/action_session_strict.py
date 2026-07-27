@@ -2,7 +2,8 @@
 
 Parsing is bounded and completed before identity, authority, or campaign claims are
 considered, so ambiguous JSON can never reach the custody model. The reader is
-installed through one explicit seam and does not reinterpret accepted payloads.
+installed through one explicit seam, does not reinterpret accepted payloads, and
+is qualified together with session and spool transaction custody.
 """
 
 from __future__ import annotations
