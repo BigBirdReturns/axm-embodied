@@ -1,0 +1,17 @@
+{
+  "format": "axm-unity-action-scene-job/1",
+  "actionSpecPath": "input/encounter.action-spec.json",
+  "presentation": {
+    "mode": "tabletop",
+    "targetDiameterMeters": 0.9,
+    "simulationUnitsPerMeter": 1000,
+    "playerPrefab": "primitive-player-v1",
+    "enemyPrefabs": [
+      { "kit": "skirmisher", "prefab": "primitive-skirmisher-v1" },
+      { "kit": "duelist", "prefab": "primitive-duelist-v1" },
+      { "kit": "swarm", "prefab": "primitive-swarm-v1" },
+      { "kit": "hexer", "prefab": "primitive-hexer-v1" },
+      { "kit": "breaker", "prefab": "primitive-breaker-v1" }
+    ]
+  }
+}
