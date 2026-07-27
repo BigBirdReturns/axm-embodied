@@ -1,0 +1,26 @@
+{
+  "name": "com.bigbirdreturns.axm-action-player",
+  "displayName": "AXM Action Player",
+  "version": "0.1.0",
+  "unity": "6000.0",
+  "description": "A low-power Unity and AR presentation client for the Arc-owned deterministic action runtime. Unity samples tracked input and renders authoritative state without owning combat or campaign law.",
+  "keywords": [
+    "axm",
+    "rodoh",
+    "action",
+    "deterministic",
+    "ar",
+    "quest"
+  ],
+  "author": {
+    "name": "BigBirdReturns"
+  },
+  "license": "Apache-2.0",
+  "samples": [
+    {
+      "displayName": "Primitive Action Arena",
+      "description": "A dependency-free fixed-origin sample that can be replaced by the Embodied-AR-Lab placement provider.",
+      "path": "Samples~/PrimitiveActionArena"
+    }
+  ]
+}
