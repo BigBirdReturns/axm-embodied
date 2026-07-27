@@ -7,12 +7,13 @@ considered, so ambiguous JSON can never reach the custody model.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from . import action_session as session
 from .strict_json import StrictJsonError, read_object
 
 
-def _strict_session_read(path: Path) -> dict:
+def _strict_session_read(path: Path) -> dict[str, Any]:
     try:
         return read_object(path, maximum_bytes=session.MAX_EVENT_BYTES * 8)
     except StrictJsonError as exc:
