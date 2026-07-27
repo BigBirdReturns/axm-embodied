@@ -1,0 +1,14 @@
+{
+  "name": "BigBirdReturns.Axm.ActionPlayer",
+  "rootNamespace": "BigBirdReturns.Axm.ActionPlayer",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
