@@ -3,6 +3,7 @@
 Parsing is bounded and completed before identity, authority, or campaign claims are
 considered, so ambiguous JSON can never reach the custody model. The reader is
 installed through one explicit seam and does not reinterpret accepted payloads.
+This file is covered by the repository's consolidated action-evidence supergate.
 """
 
 from __future__ import annotations
