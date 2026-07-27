@@ -1,5 +1,6 @@
 name: RODOH action evidence custody
 
+# Exact pull-request evaluation of the final consolidated evidence gate.
 on:
   pull_request:
     paths:
