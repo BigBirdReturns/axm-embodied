@@ -1,4 +1,8 @@
-"""Strict duplicate-key refusing reader for embodied action-session journals."""
+"""Strict duplicate-key refusing reader for embodied action-session journals.
+
+Parsing is bounded and completed before identity, authority, or campaign claims are
+considered, so ambiguous JSON can never reach the custody model.
+"""
 
 from __future__ import annotations
 
