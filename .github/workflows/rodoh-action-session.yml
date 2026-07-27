@@ -3,7 +3,9 @@ name: RODOH action-session custody
 on:
   pull_request:
     paths:
+      - '.gitignore'
       - 'src/axm_embodied/action_session.py'
+      - 'src/axm_embodied/action_session_strict.py'
       - 'tests/test_action_session.py'
       - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
       - '.github/workflows/rodoh-action-session.yml'
@@ -11,7 +13,9 @@ on:
     branches:
       - feature/rodoh-action-session-evidence-v1
     paths:
+      - '.gitignore'
       - 'src/axm_embodied/action_session.py'
+      - 'src/axm_embodied/action_session_strict.py'
       - 'tests/test_action_session.py'
       - 'docs/RODOH_ACTION_SESSION_EVIDENCE.md'
       - '.github/workflows/rodoh-action-session.yml'
