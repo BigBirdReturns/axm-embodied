@@ -1,7 +1,8 @@
 {
   "format": "axm-embodied-action-evidence-artifact-run/1",
-  "status": "running",
+  "status": "pass",
   "runId": "30240590242",
   "carrier": "f9a62b5d789a05d90abb836b43b51260394a711e",
-  "candidate": "69b7f9a7bad5b4a94210313ca267a9b479402f09"
+  "candidate": "69b7f9a7bad5b4a94210313ca267a9b479402f09",
+  "genesisCommit": "9074e7fb2e9cedde692b248cdd0c6a805e77d8ac"
 }
