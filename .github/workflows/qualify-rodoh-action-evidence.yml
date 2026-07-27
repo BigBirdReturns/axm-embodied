@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - '.github/workflows/qualify-rodoh-action-evidence.yml'
+  push:
+    branches:
+      - qualify/rodoh-action-evidence-final-v1
+    paths:
+      - '.github/workflows/qualify-rodoh-action-evidence.yml'
   workflow_dispatch:
 
 permissions:
