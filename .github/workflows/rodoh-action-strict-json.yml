@@ -1,4 +1,5 @@
 name: RODOH action strict JSON boundary
+# Exact-head qualification trigger for duplicate-key and resource refusal.
 
 on:
   pull_request:

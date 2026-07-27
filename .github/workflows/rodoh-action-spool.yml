@@ -1,4 +1,5 @@
 name: RODOH action spool ingestion
+# Exact-head qualification trigger for repaired strict spool and session readers.
 
 on:
   pull_request:

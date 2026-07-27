@@ -1,4 +1,5 @@
 name: RODOH action-session custody
+# Exact-head qualification trigger for the repaired strict session reader.
 
 on:
   pull_request:
